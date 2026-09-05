@@ -1,0 +1,41 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "ingress": "internal-and-cloud-load-balancing",
+    "service_account": "aegis-sa@project-id.iam.gserviceaccount.com",
+    "authentication": {
+      "require_auth": true
+    },
+    "tls_min_version": "1.3",
+    "iam_bindings": [
+      {
+        "role": "roles/run.invoker",
+        "members": [
+          "serviceAccount:aegis-sa@project-id.iam.gserviceaccount.com"
+        ]
+      },
+      {
+        "role": "roles/secretmanager.secretAccessor",
+        "members": [
+          "serviceAccount:aegis-sa@project-id.iam.gserviceaccount.com"
+        ]
+      }
+    ],
+    "wif": {
+      "provider": "projects/123/locations/global/workloadIdentityPools/github/providers/repo",
+      "static_keys": []
+    },
+    "encryption": {
+      "kms_key": "projects/project-id/locations/global/keyRings/aegis/cryptoKeys/main",
+      "key_rotation_period": "7776000s"
+    },
+    "secrets": {
+      "storage": "secret_manager",
+      "access_method": "workload_identity"
+    },
+    "network": {
+      "vpc_connector": "projects/project-id/locations/us-central1/connectors/aegis-connector",
+      "egress_setting": "private-ranges-only"
+    }
+  }
+}

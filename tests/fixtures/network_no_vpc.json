@@ -1,0 +1,9 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "network": {
+      "vpc_connector": null,
+      "egress_setting": "all-traffic"
+    }
+  }
+}

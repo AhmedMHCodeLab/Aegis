@@ -1,0 +1,11 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "ingress": "internal-and-cloud-load-balancing",
+    "service_account": "aegis-sa@project-id.iam.gserviceaccount.com",
+    "authentication": {
+      "require_auth": true
+    },
+    "tls_min_version": "1.3"
+  }
+}

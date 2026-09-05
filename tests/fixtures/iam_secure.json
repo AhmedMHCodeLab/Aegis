@@ -1,0 +1,23 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "iam_bindings": [
+      {
+        "role": "roles/run.invoker",
+        "members": [
+          "serviceAccount:aegis-sa@project-id.iam.gserviceaccount.com"
+        ]
+      },
+      {
+        "role": "roles/secretmanager.secretAccessor",
+        "members": [
+          "serviceAccount:aegis-sa@project-id.iam.gserviceaccount.com"
+        ]
+      }
+    ],
+    "wif": {
+      "provider": "projects/123/locations/global/workloadIdentityPools/github/providers/repo",
+      "static_keys": []
+    }
+  }
+}

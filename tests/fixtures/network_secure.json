@@ -1,0 +1,9 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "network": {
+      "vpc_connector": "projects/project-id/locations/us-central1/connectors/aegis-connector",
+      "egress_setting": "private-ranges-only"
+    }
+  }
+}

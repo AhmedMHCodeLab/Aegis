@@ -1,0 +1,24 @@
+- id: KMS-001
+  name: CMEK configured
+  category: KMS
+  severity: MEDIUM
+  description: Resources must use Customer-Managed Encryption Keys, not Google-managed default encryption.
+  field: encryption.kms_key
+  operator: exists
+  expected: null
+  remediation: >-
+    Configure a Cloud KMS key and apply it as the CMEK for applicable
+    resources. Google-managed encryption provides no key control or
+    rotation visibility.
+
+- id: KMS-002
+  name: Key rotation enabled
+  category: KMS
+  severity: MEDIUM
+  description: KMS keys must have automatic rotation configured.
+  field: encryption.key_rotation_period
+  operator: exists
+  expected: null
+  remediation: >-
+    Set an automatic rotation period on the Cloud KMS key (recommended:
+    90 days). Key rotation limits the blast radius of a compromised key.

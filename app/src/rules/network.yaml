@@ -1,0 +1,31 @@
+- id: NET-001
+  name: VPC Connector attached
+  category: Network
+  severity: HIGH
+  description: Cloud Run must route egress through a VPC Connector for network isolation.
+  field: network.vpc_connector
+  operator: exists
+  expected: null
+  remediation: >-
+    Attach a Serverless VPC Access Connector to the Cloud Run service
+    so egress traffic routes through your VPC where firewall rules and
+    Private Google Access apply.
+
+- id: NET-002
+  name: Restricted egress
+  category: Network
+  severity: MEDIUM
+  description: Egress must be restricted to VPC Connector routes, not all traffic.
+  # not_equals passes on an absent field, so presence is asserted first: an
+  # undeclared egress setting is missing evidence, not a restricted egress.
+  assertions:
+    - field: network.egress_setting
+      operator: exists
+    - field: network.egress_setting
+      operator: not_equals
+      expected: all-traffic
+  remediation: >-
+    Set egress to 'private-ranges-only' or use VPC firewall rules to
+    enforce default-deny egress with explicit allowlists. 'all-traffic'
+    routes everything through the connector but does not restrict
+    destinations.

@@ -1,0 +1,25 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "iam_bindings": [
+      {
+        "role": "roles/owner",
+        "members": [
+          "user:admin@example.com"
+        ]
+      },
+      {
+        "role": "roles/run.invoker",
+        "members": [
+          "allUsers"
+        ]
+      }
+    ],
+    "wif": {
+      "provider": null,
+      "static_keys": [
+        "key-abc-123"
+      ]
+    }
+  }
+}

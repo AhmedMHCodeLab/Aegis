@@ -1,0 +1,34 @@
+- id: IAM-001
+  name: No overprivileged roles
+  category: IAM
+  severity: HIGH
+  description: IAM bindings must not use overprivileged primitive roles.
+  field: iam_bindings
+  evaluator: custom
+  handler: src.rules.custom.iam_001
+  remediation: >-
+    Replace primitive roles (roles/owner, roles/editor) with predefined
+    or custom roles scoped to the minimum permissions required.
+
+- id: IAM-002
+  name: No public bindings
+  category: IAM
+  severity: CRITICAL
+  description: IAM bindings must not grant access to allUsers or allAuthenticatedUsers.
+  field: iam_bindings
+  evaluator: custom
+  handler: src.rules.custom.iam_002
+  remediation: >-
+    Remove any IAM binding that grants access to allUsers or
+    allAuthenticatedUsers. Use IAP or specific identity bindings instead.
+
+- id: IAM-003
+  name: WIF configured (no static keys)
+  category: IAM
+  severity: HIGH
+  description: Workload Identity Federation must be configured with zero static service account keys.
+  evaluator: custom
+  handler: src.rules.custom.iam_003
+  remediation: >-
+    Configure Workload Identity Federation for external identity providers
+    (e.g., GitHub OIDC) and remove all static service account keys.

@@ -1,0 +1,43 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "ingress": "all",
+    "service_account": "default",
+    "authentication": {
+      "require_auth": false
+    },
+    "tls_min_version": "1.0",
+    "iam_bindings": [
+      {
+        "role": "roles/owner",
+        "members": [
+          "user:admin@example.com"
+        ]
+      },
+      {
+        "role": "roles/run.invoker",
+        "members": [
+          "allUsers"
+        ]
+      }
+    ],
+    "wif": {
+      "provider": null,
+      "static_keys": [
+        "key-abc-123"
+      ]
+    },
+    "encryption": {
+      "kms_key": null,
+      "key_rotation_period": null
+    },
+    "secrets": {
+      "storage": "environment_variable",
+      "access_method": "static_key"
+    },
+    "network": {
+      "vpc_connector": null,
+      "egress_setting": "all-traffic"
+    }
+  }
+}

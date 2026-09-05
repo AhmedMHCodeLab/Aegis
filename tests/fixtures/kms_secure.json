@@ -1,0 +1,9 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "encryption": {
+      "kms_key": "projects/project-id/locations/global/keyRings/aegis/cryptoKeys/main",
+      "key_rotation_period": "7776000s"
+    }
+  }
+}

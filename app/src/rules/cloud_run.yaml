@@ -1,0 +1,54 @@
+- id: CR-001
+  name: Restricted ingress
+  category: Cloud Run
+  severity: HIGH
+  description: Cloud Run must not accept direct public traffic.
+  field: ingress
+  operator: equals
+  expected: internal-and-cloud-load-balancing
+  remediation: >-
+    Set Cloud Run ingress to 'internal-and-cloud-load-balancing'
+    so traffic must route through the load balancer where Cloud Armor
+    and IAP enforce security policies.
+
+- id: CR-002
+  name: Dedicated service account
+  category: Cloud Run
+  severity: HIGH
+  description: Cloud Run must use a dedicated service account, not the default compute SA.
+  # not_equals passes on an absent field, so presence is asserted first: an
+  # undeclared service account is missing evidence, not a dedicated account.
+  assertions:
+    - field: service_account
+      operator: exists
+    - field: service_account
+      operator: not_equals
+      expected: default
+  remediation: >-
+    Create a dedicated service account with least-privilege permissions
+    for this Cloud Run service. Never use the default compute service account.
+
+- id: CR-003
+  name: Authentication required
+  category: Cloud Run
+  severity: HIGH
+  description: Cloud Run must require authentication on all requests.
+  field: authentication.require_auth
+  operator: equals
+  expected: true
+  remediation: >-
+    Set 'require authentication' on the Cloud Run service. Unauthenticated
+    invocations should be blocked at the service level, with IAP providing
+    the authentication layer at the load balancer.
+
+- id: CR-004
+  name: Minimum TLS version
+  category: Cloud Run
+  severity: MEDIUM
+  description: Cloud Run must enforce TLS 1.2 or higher.
+  field: tls_min_version
+  operator: gte
+  expected: "1.2"
+  remediation: >-
+    Configure the SSL policy on the load balancer to enforce TLS 1.2
+    minimum. Use RESTRICTED or MODERN profile.
