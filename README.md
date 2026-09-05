@@ -167,6 +167,7 @@ pytest -v
 
 - [**Fail-Closed Evaluation**](Docs/Fail-Closed-Evaluation.md) -> Why absent fields fail controls, and why the engine-level alternative was rejected
 - [**Python Policy vs OPA**](Docs/PythonPolicy-vs-OPA.md) -> Why a Python engine over Open Policy Agent for this scope
+- [**Distroless Container**](Docs/Distroless-Container.md) -> Why distroless over slim/alpine, and what it removes from the attack surface
 
 ## Project structure
 
