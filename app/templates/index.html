@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101215" media="(prefers-color-scheme: dark)">
+<title>Aegis · Compliance Checkpoint</title>
+<link rel="icon" type="image/jpeg" href="/static/AegisLogo.jpg">
+<style>
+:root {
+  color-scheme: light;
+  --paper: #fbfbfa;
+  --surface: #ffffff;
+  --inset: #f4f4f2;
+  --ink: #16191d;
+  --ink-2: #545b66;
+  --ink-3: #6c737c;
+  --rule: rgba(22,25,29,.10);
+  --rule-strong: rgba(22,25,29,.18);
+  --accent: #1c3f5e;
+  --on-accent: #ffffff;
+  --pass: #3c785b;
+  --critical: #8f2f2f;
+  --high: #ad5229;
+  --medium: #87671a;
+  --low: #666d76;
+  --pass-bg: rgba(60,120,91,.10);
+  --critical-bg: rgba(143,47,47,.10);
+  --high-bg: rgba(173,82,41,.10);
+  --medium-bg: rgba(135,103,26,.10);
+  --low-bg: rgba(102,109,118,.10);
+  --accent-bg: rgba(28,63,94,.08);
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --ease: cubic-bezier(.23,1,.32,1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #101215;
+    --surface: #16191d;
+    --inset: #1c2025;
+    --ink: #e8e9ea;
+    --ink-2: #a8aeb8;
+    --ink-3: #868d97;
+    --rule: rgba(255,255,255,.10);
+    --rule-strong: rgba(255,255,255,.20);
+    --accent: #7aa5cc;
+    --on-accent: #0d1117;
+    --pass: #5fa382;
+    --critical: #d9736f;
+    --high: #dd8f5e;
+    --medium: #cfa94a;
+    --low: #868d97;
+    --pass-bg: rgba(95,163,130,.14);
+    --critical-bg: rgba(217,115,111,.14);
+    --high-bg: rgba(221,143,94,.14);
+    --medium-bg: rgba(207,169,74,.14);
+    --low-bg: rgba(134,141,151,.14);
+    --accent-bg: rgba(122,165,204,.12);
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--sans);
+  touch-action: manipulation;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { text-wrap: pretty; margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.skip {
+  position: absolute; left: -9999px; top: 8px;
+  background: var(--accent); color: var(--on-accent);
+  padding: 8px 14px; border-radius: var(--r-md); z-index: 20;
+}
+.skip:focus { left: 16px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+
+/* ---------- masthead ---------- */
+.masthead { border-bottom: 1px solid var(--rule); background: var(--surface); }
+.masthead-in {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; padding: 20px 0 0;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-logo {
+  width: 32px; height: 32px; border-radius: 6px; object-fit: cover;
+}
+.brand-name {
+  font-size: 18px; font-weight: 600; letter-spacing: -.02em; margin: 0;
+}
+.brand-sub {
+  font-size: 12px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase;
+}
+.masthead-meta {
+  font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.tabs { display: flex; gap: 4px; margin-top: 18px; }
+.tab {
+  appearance: none; background: none; border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 14px 11px; margin-bottom: -1px;
+  font-size: 14px; font-weight: 500; color: var(--ink-3);
+  cursor: pointer; border-radius: var(--r-sm) var(--r-sm) 0 0;
+  transition: color 140ms var(--ease), border-color 140ms var(--ease);
+}
+.tab:hover:not(:disabled) { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- panels ---------- */
+main { padding: 40px 0 96px; }
+[role="tabpanel"][hidden] { display: none !important; }
+.lede { max-width: 62ch; margin-bottom: 28px; }
+.lede h2 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.lede p { color: var(--ink-2); margin-top: 6px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+}
+.field-row {
+  display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+  padding: 20px 20px 0;
+}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+select {
+  appearance: none;
+  background: var(--inset) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%236c737c' stroke-width='1.5'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-md);
+  padding: 8px 32px 8px 10px;
+  font: inherit; min-width: 220px; cursor: pointer;
+}
+.spacer { flex: 1 1 auto; }
+.linkbtn {
+  appearance: none; background: none; border: 0; padding: 8px 2px;
+  color: var(--accent); font-size: 13px; font-weight: 500; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.linkbtn:hover { text-decoration-color: currentColor; }
+
+/* ---------- json editor ---------- */
+.editor-shell { padding: 16px 20px 0; }
+.editor {
+  position: relative;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-md);
+  background: var(--inset);
+  overflow: hidden;
+}
+.editor.invalid { border-color: var(--critical); }
+.editor-hl, .editor textarea {
+  margin: 0;
+  padding: 14px 16px;
+  font: 400 13px/1.65 var(--mono);
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  border: 0;
+}
+.editor-hl {
+  min-height: 380px; max-height: 52vh;
+  overflow: auto; color: var(--ink);
+  pointer-events: none;
+}
+.editor-hl, .editor textarea { scrollbar-width: none; }
+.editor-hl::-webkit-scrollbar, .editor textarea::-webkit-scrollbar { display: none; }
+.editor textarea {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  resize: none; background: transparent;
+  color: transparent; caret-color: var(--ink);
+  overflow: auto;
+}
+.editor textarea::selection { background: var(--accent-bg); }
+.editor textarea:focus { outline: none; }
+.editor:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.t-key { color: var(--accent); }
+.t-str { color: var(--pass); }
+.t-num { color: var(--high); }
+.t-lit { color: var(--critical); font-weight: 500; }
+
+.editor-foot {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 20px 20px;
+}
+.parse-msg { font-size: 12.5px; color: var(--ink-3); font-family: var(--mono); }
+.parse-msg.error { color: var(--critical); }
+
+/* ---------- buttons ---------- */
+.btn {
+  appearance: none; border: 1px solid transparent; border-radius: var(--r-md);
+  padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), transform 100ms var(--ease);
+}
+.btn:active:not(:disabled) { transform: scale(.98); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, var(--ink)); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-ghost { background: var(--surface); border-color: var(--rule-strong); color: var(--ink); }
+.btn-ghost:hover { background: var(--inset); }
+
+/* ---------- results hero ---------- */
+.hero {
+  display: grid; grid-template-columns: 260px 1fr; gap: 48px; align-items: center;
+  padding: 36px 40px; margin-bottom: 32px;
+}
+.ring-wrap { position: relative; width: 240px; height: 240px; }
+.ring { width: 240px; height: 240px; display: block; }
+.seg { transition: opacity 260ms var(--ease); }
+.ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; pointer-events: none;
+}
+.score-num {
+  font-size: 54px; font-weight: 600; letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.score-verdict {
+  font-size: 11px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); margin-top: 6px;
+}
+.hero-side h2 {
+  font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 4px;
+}
+.hero-side .sub { color: var(--ink-2); font-size: 13.5px; }
+.tally { display: flex; gap: 28px; margin: 24px 0 26px; flex-wrap: wrap; }
+.tally-item { display: flex; flex-direction: column; gap: 3px; }
+.tally-n {
+  font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em; line-height: 1.1;
+}
+.tally-l {
+  font-size: 11px; font-weight: 500; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-3);
+  display: flex; align-items: center; gap: 6px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- results list ---------- */
+.cat { margin-bottom: 14px; overflow: hidden; }
+.cat > summary, .rule > summary { cursor: pointer; list-style: none; }
+.cat > summary::-webkit-details-marker,
+.rule > summary::-webkit-details-marker { display: none; }
+.cat > summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px;
+}
+.cat > summary:hover { background: var(--inset); }
+.cat-name { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.cat-count {
+  font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+  margin-left: auto; margin-right: 4px;
+}
+.chev {
+  width: 14px; height: 14px; flex: none; color: var(--ink-3);
+  transition: transform 180ms var(--ease);
+}
+details[open] > summary .chev { transform: rotate(90deg); }
+.cat-body { border-top: 1px solid var(--rule); }
+details[open] > .cat-body, details[open] > .rule-body { animation: reveal 190ms var(--ease); }
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.rule { border-bottom: 1px solid var(--rule); }
+.rule:last-child { border-bottom: 0; }
+.rule > summary {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 20px 13px 17px;
+  border-left: 3px solid transparent;
+}
+.rule > summary:hover { background: var(--inset); }
+.rule.is-critical > summary { border-left-color: var(--critical); background: var(--critical-bg); }
+.glyph { width: 16px; height: 16px; flex: none; }
+.rid {
+  font: 500 12px var(--mono); color: var(--ink-3);
+  letter-spacing: -.01em; flex: none;
+}
+.rname { font-size: 14px; font-weight: 500; min-width: 0; flex: 1 1 auto; }
+.badge {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: var(--r-sm); flex: none;
+}
+.b-CRITICAL { color: var(--critical); background: var(--critical-bg); }
+.b-HIGH { color: var(--high); background: var(--high-bg); }
+.b-MEDIUM { color: var(--medium); background: var(--medium-bg); }
+.b-LOW { color: var(--low); background: var(--low-bg); }
+.st { font-size: 11px; font-weight: 600; letter-spacing: .07em; flex: none; width: 38px; }
+.st-PASS { color: var(--pass); }
+.st-FAIL { color: var(--critical); }
+.st-WARN { color: var(--medium); }
+
+.rule-body { padding: 4px 20px 22px 40px; }
+.ev { border-left: 2px solid var(--rule-strong); padding-left: 16px; margin-bottom: 16px; }
+.ev-h, .rem-h {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px;
+}
+.ev-row { display: flex; gap: 10px; padding: 3px 0; font-size: 13px; align-items: baseline; }
+.ev-k { color: var(--ink-3); width: 74px; flex: none; }
+.ev-v {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+  overflow-wrap: anywhere; min-width: 0;
+}
+.ev-v.bad { color: var(--critical); }
+.ev-v.good { color: var(--pass); }
+.rem {
+  background: var(--accent-bg); border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-md) var(--r-md) 0; padding: 12px 16px;
+}
+.rem p { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+
+/* ---------- rules catalogue ---------- */
+.search-row { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+input[type="search"] {
+  flex: 1 1 auto; max-width: 380px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule-strong); border-radius: var(--r-md);
+  padding: 9px 12px; font: inherit;
+}
+input[type="search"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.search-count { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.cat-block { margin-bottom: 36px; }
+.cat-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--rule);
+}
+.cat-head h3 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.cat-head span { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.rule-card { padding: 16px 18px; }
+.rule-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.rule-card h4 { font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+.rule-card p { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.empty { color: var(--ink-3); font-size: 13.5px; padding: 32px 0; }
+
+@media (max-width: 900px) {
+  .wrap { padding: 0 20px; }
+  .hero { grid-template-columns: 1fr; gap: 28px; padding: 28px 24px; justify-items: center; text-align: center; }
+  .tally { justify-content: center; }
+  .hero-actions { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+
+<header class="masthead">
+  <div class="wrap masthead-in-outer">
+    <div class="masthead-in">
+      <div class="brand">
+        <img src="/static/AegisLogo.jpg" alt="" class="brand-logo" width="32" height="32">
+        <h1 class="brand-name" translate="no">Aegis</h1>
+        <span class="brand-sub">Compliance Checkpoint</span>
+      </div>
+      <div class="masthead-meta">{{ total_rules }} controls · 5 categories</div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button class="tab" role="tab" id="tab-assess" aria-controls="panel-assess" aria-selected="true">Assess</button>
+      <button class="tab" role="tab" id="tab-results" aria-controls="panel-results" aria-selected="false" disabled>Results</button>
+      <button class="tab" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false">Rules</button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <!-- ============ ASSESS ============ -->
+  <section id="panel-assess" role="tabpanel" aria-labelledby="tab-assess">
+    <div class="lede">
+      <h2>Validate a resource configuration</h2>
+      <p>Paste a Cloud Run service configuration below. Aegis evaluates it against {{ total_rules }} controls
+         and returns pass or fail per control, with the evidence behind each verdict.</p>
+    </div>
+
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label for="resourceType">Resource Type</label>
+          <select id="resourceType" name="resource_type">
+            <option value="cloud_run_service">Cloud Run Service</option>
+          </select>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="linkbtn" id="loadExample">Load Example Configuration</button>
+      </div>
+
+      <div class="editor-shell">
+        <div class="editor" id="editorBox">
+          <pre class="editor-hl" aria-hidden="true"><code id="hl"></code></pre>
+          <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"
+                    aria-label="Resource configuration, JSON"
+                    placeholder="Paste a JSON configuration, or load the example…"></textarea>
+        </div>
+      </div>
+
+      <div class="editor-foot">
+        <button type="button" class="btn btn-primary" id="validate" disabled>Validate Configuration</button>
+        <p class="parse-msg" id="parseMsg" role="status" aria-live="polite">Awaiting configuration</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="panel-results" role="tabpanel" aria-labelledby="tab-results" hidden>
+    <div class="card hero">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 240 240" role="img" aria-labelledby="ringTitle">
+          <title id="ringTitle">Compliance score</title>
+          <g id="ringTrack"></g>
+          <g id="ringSegs" class="ring-anim"></g>
+        </svg>
+        <div class="ring-center">
+          <div class="score-num" id="scoreNum">0%</div>
+          <div class="score-verdict" id="scoreVerdict">&nbsp;</div>
+        </div>
+      </div>
+
+      <div class="hero-side">
+        <h2>Assessment Complete</h2>
+        <p class="sub" id="heroSub">&nbsp;</p>
+
+        <div class="tally" id="tally"></div>
+
+        <div class="hero-actions">
+          <button type="button" class="btn btn-ghost" id="exportJson">Export JSON</button>
+          <button type="button" class="btn btn-ghost" id="newAssessment">New Assessment</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="findings"></div>
+  </section>
+
+  <!-- ============ RULES ============ -->
+  <section id="panel-rules" role="tabpanel" aria-labelledby="tab-rules" hidden>
+    <div class="lede">
+      <h2>Security baseline</h2>
+      <p>The complete control catalogue Aegis evaluates against, grouped by category.</p>
+    </div>
+
+    <div class="search-row">
+      <label class="visually-hidden" for="ruleSearch" style="position:absolute;left:-9999px">Search controls</label>
+      <input type="search" id="ruleSearch" placeholder="Filter by ID, name, or description…"
+             autocomplete="off" spellcheck="false">
+      <span class="search-count" id="searchCount" role="status" aria-live="polite"></span>
+    </div>
+
+    <div id="catalogue">
+      {% for category, items in rules_by_category.items() %}
+      <div class="cat-block" data-block>
+        <div class="cat-head">
+          <h3>{{ category }}</h3>
+          <span>{{ items | length }} {% if items | length == 1 %}rule{% else %}rules{% endif %}</span>
+        </div>
+        <div class="rule-grid">
+          {% for r in items %}
+          <article class="card rule-card" data-rule
+                   data-text="{{ (r.id ~ ' ' ~ r.name ~ ' ' ~ r.description) | lower }}">
+            <div class="rule-card-top">
+              <span class="rid">{{ r.id }}</span>
+              <span class="badge b-{{ r.severity }}">{{ r.severity }}</span>
+            </div>
+            <h4>{{ r.name }}</h4>
+            <p>{{ r.description }}</p>
+          </article>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="empty" id="noMatches" hidden>No controls match that filter.</p>
+  </section>
+
+</main>
+
+<script>
+const RULES_BY_CATEGORY = {{ rules_by_category | tojson }};
+const TOTAL_RULES = {{ total_rules }};
+
+const EXAMPLE_CONFIG = {
+  "ingress": "all",
+  "service_account": "default",
+  "authentication": { "require_auth": false },
+  "tls_min_version": "1.0",
+  "iam_bindings": [
+    { "role": "roles/owner", "members": ["user:admin@example.com"] },
+    { "role": "roles/run.invoker", "members": ["allUsers"] }
+  ],
+  "wif": { "provider": null, "static_keys": ["key-abc-123"] },
+  "encryption": { "kms_key": null, "key_rotation_period": null },
+  "secrets": { "storage": "environment_variable", "access_method": "static_key" },
+  "network": { "vpc_connector": null, "egress_setting": "all-traffic" }
+};
+
+const $ = (id) => document.getElementById(id);
+const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+/* ---------------- tabs ---------------- */
+const TABS = ["assess", "results", "rules"];
+
+function showTab(name) {
+  TABS.forEach((t) => {
+    const tab = $("tab-" + t), panel = $("panel-" + t);
+    const on = t === name;
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+    panel.hidden = !on;
+  });
+  if (name !== "results") location.hash = name === "assess" ? "" : name;
+}
+
+TABS.forEach((t) => {
+  $("tab-" + t).addEventListener("click", () => showTab(t));
+});
+
+$("tab-assess").parentElement.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const usable = TABS.filter((t) => !$("tab-" + t).disabled);
+  const current = usable.findIndex((t) => $("tab-" + t).getAttribute("aria-selected") === "true");
+  const next = (current + (e.key === "ArrowRight" ? 1 : usable.length - 1)) % usable.length;
+  e.preventDefault();
+  showTab(usable[next]);
+  $("tab-" + usable[next]).focus();
+});
+
+if (location.hash === "#rules") showTab("rules");
+
+/* ---------------- json editor ---------------- */
+const editor = $("editor"), hl = $("hl"), editorBox = $("editorBox");
+const parseMsg = $("parseMsg"), validateBtn = $("validate");
+
+const escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function paint(src) {
+  const tokens = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+  hl.innerHTML = escHtml(src).replace(tokens, (m, str, colon, lit, num) => {
+    if (str !== undefined) {
+      return colon !== undefined
+        ? '<span class="t-key">' + str + "</span>" + colon
+        : '<span class="t-str">' + str + "</span>";
+    }
+    if (lit !== undefined) return '<span class="t-lit">' + lit + "</span>";
+    return '<span class="t-num">' + num + "</span>";
+  }) + "\n";
+}
+
+function syncScroll() {
+  hl.parentElement.scrollTop = editor.scrollTop;
+  hl.parentElement.scrollLeft = editor.scrollLeft;
+}
+
+function refresh() {
+  const raw = editor.value;
+  paint(raw);
+  syncScroll();
+
+  if (!raw.trim()) {
+    editorBox.classList.remove("invalid");
+    parseMsg.classList.remove("error");
+    parseMsg.textContent = "Awaiting configuration";
+    validateBtn.disabled = true;
+    return;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Top level must be a JSON object");
+    }
+    editorBox.classList.remove("invalid");
+    parseMsg.classList.remove("error");
+    parseMsg.textContent = "Valid JSON · " + Object.keys(parsed).length + " top-level keys";
+    validateBtn.disabled = false;
+  } catch (err) {
+    editorBox.classList.add("invalid");
+    parseMsg.classList.add("error");
+    parseMsg.textContent = err.message + " — fix the syntax to continue";
+    validateBtn.disabled = true;
+  }
+}
+
+editor.addEventListener("input", refresh);
+editor.addEventListener("scroll", syncScroll);
+
+$("loadExample").addEventListener("click", () => {
+  editor.value = JSON.stringify(EXAMPLE_CONFIG, null, 2);
+  refresh();
+  editor.focus();
+});
+
+/* ---------------- score ring ---------------- */
+const R = 104, CX = 120, CIRC = 2 * Math.PI * R;
+
+function buildRing(results) {
+  const n = results.length || 1;
+  const step = CIRC / n;
+  const gap = Math.min(6, step * 0.18);
+  const dash = step - gap;
+  const track = $("ringTrack"), segs = $("ringSegs");
+  track.innerHTML = "";
+  segs.innerHTML = "";
+
+  results.forEach((r, i) => {
+    const common =
+      'cx="' + CX + '" cy="' + CX + '" r="' + R + '" fill="none" ' +
+      'stroke-dasharray="' + dash.toFixed(2) + " " + (CIRC - dash).toFixed(2) + '" ' +
+      'stroke-dashoffset="' + (-i * step).toFixed(2) + '" ' +
+      'transform="rotate(-90 ' + CX + " " + CX + ')"';
+
+    track.insertAdjacentHTML("beforeend",
+      "<circle " + common + ' stroke="var(--rule)" stroke-width="16"/>');
+
+    const passed = r.status === "PASS";
+    const colour = passed ? "var(--pass)" : "var(--" + r.severity.toLowerCase() + ")";
+    segs.insertAdjacentHTML("beforeend",
+      "<circle class=\"seg\" " + common +
+      ' stroke="' + colour + '" stroke-width="' + (passed ? 16 : 6) + '"' +
+      ' style="opacity:' + (REDUCED ? 1 : 0) + '"><title>' +
+      r.rule_id + ": " + r.status + "</title></circle>");
+  });
+
+  if (!REDUCED) {
+    const nodes = segs.querySelectorAll(".seg");
+    nodes.forEach((node, i) => {
+      setTimeout(() => { node.style.opacity = "1"; }, 40 * i);
+    });
+  }
+}
+
+function verdictFor(score) {
+  if (score >= 100) return ["Fully Compliant", "var(--pass)"];
+  if (score >= 70) return ["Largely Compliant", "var(--pass)"];
+  if (score >= 40) return ["Needs Remediation", "var(--medium)"];
+  return ["Critical Gaps", "var(--critical)"];
+}
+
+function animateScore(target) {
+  const el = $("scoreNum");
+  if (REDUCED) { el.textContent = target + "%"; return; }
+  const start = performance.now(), dur = 620;
+  function frame(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = Math.round(target * eased) + "%";
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- findings ---------------- */
+const GLYPH = {
+  PASS: '<svg class="glyph" viewBox="0 0 16 16" fill="none" stroke="var(--pass)" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="6.6"/><path d="m5.2 8.2 2 2 3.6-4"/></svg>',
+  FAIL: '<svg class="glyph" viewBox="0 0 16 16" fill="none" stroke="var(--critical)" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="6.6"/><path d="m5.8 5.8 4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
+  WARN: '<svg class="glyph" viewBox="0 0 16 16" fill="none" stroke="var(--medium)" stroke-width="1.8" aria-hidden="true"><path d="M8 2.2 14.4 13H1.6z"/><path d="M8 6.4v3"/></svg>'
+};
+const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 3.5 5 4.5-5 4.5"/></svg>';
+
+function fmt(value) {
+  if (value === null || value === undefined) return "not set";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function renderFindings(results) {
+  const order = [];
+  const groups = new Map();
+  results.forEach((r) => {
+    if (!groups.has(r.category)) { groups.set(r.category, []); order.push(r.category); }
+    groups.get(r.category).push(r);
+  });
+
+  $("findings").innerHTML = order.map((category) => {
+    const items = groups.get(category).slice().sort((a, b) => {
+      const byStatus = (a.status === "PASS" ? 1 : 0) - (b.status === "PASS" ? 1 : 0);
+      if (byStatus) return byStatus;
+      return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    });
+    const passed = items.filter((r) => r.status === "PASS").length;
+    const anyFail = passed < items.length;
+
+    const rows = items.map((r) => {
+      const critical = r.status === "FAIL" && r.severity === "CRITICAL";
+      const expected = r.evidence.expected === null ? "must be present" : fmt(r.evidence.expected);
+      return '<details class="rule' + (critical ? " is-critical" : "") + '">' +
+        "<summary>" + GLYPH[r.status] +
+          '<span class="st st-' + r.status + '">' + r.status + "</span>" +
+          '<span class="rid" translate="no">' + r.rule_id + "</span>" +
+          '<span class="rname">' + r.name + "</span>" +
+          '<span class="badge b-' + r.severity + '">' + r.severity + "</span>" +
+          CHEV +
+        "</summary>" +
+        '<div class="rule-body">' +
+          '<div class="ev"><div class="ev-h">Evidence</div>' +
+            '<div class="ev-row"><span class="ev-k">Field</span><span class="ev-v">' + r.evidence.field + "</span></div>" +
+            '<div class="ev-row"><span class="ev-k">Found</span><span class="ev-v ' +
+              (r.status === "PASS" ? "good" : "bad") + '">' + fmt(r.evidence.actual) + "</span></div>" +
+            '<div class="ev-row"><span class="ev-k">Expected</span><span class="ev-v">' + expected + "</span></div>" +
+          "</div>" +
+          '<div class="rem"><div class="rem-h">Remediation</div><p>' + r.remediation + "</p></div>" +
+        "</div></details>";
+    }).join("");
+
+    return '<details class="card cat"' + (anyFail ? " open" : "") + ">" +
+      "<summary>" + CHEV +
+        '<span class="cat-name">' + category + "</span>" +
+        '<span class="cat-count">' + passed + " of " + items.length + " passed</span>" +
+      "</summary>" +
+      '<div class="cat-body">' + rows + "</div></details>";
+  }).join("");
+}
+
+function renderResults(data) {
+  const s = data.summary;
+  const score = parseInt(s.score, 10) || 0;
+  const [verdict, colour] = verdictFor(score);
+
+  $("scoreNum").style.color = colour;
+  $("scoreVerdict").textContent = verdict;
+  document.getElementById("ringTitle").textContent =
+    "Compliance score " + score + " percent. " + s.pass + " of " + s.total + " controls passed.";
+  $("heroSub").textContent =
+    s.fail === 0
+      ? "Every control in the baseline passed."
+      : s.fail + (s.fail === 1 ? " control needs" : " controls need") + " remediation before this configuration meets the baseline.";
+
+  const tally = [
+    ["Checks", s.total, "var(--ink-3)"],
+    ["Passed", s.pass, "var(--pass)"],
+    ["Failed", s.fail, "var(--critical)"]
+  ];
+  if (s.warn > 0) tally.push(["Warnings", s.warn, "var(--medium)"]);
+
+  $("tally").innerHTML = tally.map(([label, n, colour]) =>
+    '<div class="tally-item"><span class="tally-n" style="color:' + colour + '">' + n + "</span>" +
+    '<span class="tally-l"><span class="dot" style="background:' + colour + '"></span>' + label + "</span></div>"
+  ).join("");
+
+  buildRing(data.results);
+  renderFindings(data.results);
+  animateScore(score);
+}
+
+/* ---------------- validate ---------------- */
+let lastResponse = null;
+
+validateBtn.addEventListener("click", async () => {
+  let config;
+  try {
+    config = JSON.parse(editor.value);
+  } catch (err) {
+    refresh();
+    return;
+  }
+
+  const original = validateBtn.textContent;
+  validateBtn.disabled = true;
+  validateBtn.textContent = "Validating…";
+
+  try {
+    const response = await fetch("/v1/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resource_type: $("resourceType").value, config: config })
+    });
+    if (!response.ok) throw new Error("Server returned " + response.status);
+
+    lastResponse = await response.json();
+    renderResults(lastResponse);
+    $("tab-results").disabled = false;
+    showTab("results");
+    // Focus the tab, not the panel: the panel holds focusable children, so per the
+    // ARIA tabs pattern it is not a focus target itself.
+    $("tab-results").focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: REDUCED ? "auto" : "smooth" });
+  } catch (err) {
+    parseMsg.classList.add("error");
+    parseMsg.textContent = "Validation failed: " + err.message + " — check the service is running";
+  } finally {
+    validateBtn.textContent = original;
+    validateBtn.disabled = false;
+  }
+});
+
+$("newAssessment").addEventListener("click", () => {
+  lastResponse = null;
+  $("findings").innerHTML = "";
+  $("tab-results").disabled = true;
+  showTab("assess");
+  editor.focus();
+});
+
+$("exportJson").addEventListener("click", () => {
+  if (!lastResponse) return;
+  const blob = new Blob([JSON.stringify(lastResponse, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "aegis-assessment-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* ---------------- catalogue filter ---------------- */
+const search = $("ruleSearch"), searchCount = $("searchCount");
+
+function filterRules() {
+  const q = search.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("[data-rule]").forEach((card) => {
+    const match = !q || card.dataset.text.includes(q);
+    card.hidden = !match;
+    if (match) shown++;
+  });
+  document.querySelectorAll("[data-block]").forEach((block) => {
+    block.hidden = block.querySelectorAll("[data-rule]:not([hidden])").length === 0;
+  });
+  $("noMatches").hidden = shown > 0;
+  searchCount.textContent = q ? shown + " of " + TOTAL_RULES + " shown" : TOTAL_RULES + " controls";
+}
+
+search.addEventListener("input", filterRules);
+
+/* ---------------- init ---------------- */
+refresh();
+filterRules();
+</script>
+</body>
+</html>
