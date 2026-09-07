@@ -1,0 +1,91 @@
+# --- Cloud Run runtime service account ---
+
+resource "google_service_account" "cloud_run" {
+  project      = var.project_id
+  account_id   = "aegis-run"
+  display_name = "Aegis Cloud Run runtime"
+  description  = "Runtime identity for the Aegis Cloud Run service"
+}
+
+resource "google_kms_crypto_key_iam_member" "cloud_run_kms" {
+  crypto_key_id = var.crypto_key_id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = google_service_account.cloud_run.member
+}
+
+# --- CI/CD service account ---
+
+resource "google_service_account" "ci" {
+  project      = var.project_id
+  account_id   = "aegis-ci"
+  display_name = "Aegis CI/CD"
+  description  = "CI identity for GitHub Actions via WIF. Pushes images and deploys revisions."
+}
+
+# CI must be able to deploy Cloud Run revisions that run as the runtime SA.
+resource "google_service_account_iam_member" "ci_acts_as_runtime" {
+  service_account_id = google_service_account.cloud_run.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = google_service_account.ci.member
+}
+
+# --- Workload Identity Federation ---
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = var.project_id
+  workload_identity_pool_id = "github-actions"
+  display_name              = "GitHub Actions"
+  description               = "OIDC identity pool for GitHub Actions CI/CD"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  project                            = var.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "aegis-repo"
+  display_name                       = "Aegis GitHub repo"
+
+  attribute_mapping = {
+    "google.subject"                = "assertion.sub"
+    "attribute.actor"               = "assertion.actor"
+    "attribute.repository"          = "assertion.repository"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    "attribute.ref"                 = "assertion.ref"
+  }
+
+  attribute_condition = "assertion.repository_owner_id == \"${var.github_owner_id}\" && assertion.ref == \"refs/heads/main\""
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_service_account_iam_member" "wif_ci_impersonation" {
+  service_account_id = google_service_account.ci.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+locals {
+  ci_project_roles = [
+    "roles/compute.networkAdmin",
+    "roles/compute.loadBalancerAdmin",
+    "roles/compute.securityAdmin",
+    "roles/cloudkms.admin",
+    "roles/secretmanager.admin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.workloadIdentityPoolAdmin",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/artifactregistry.admin",
+    "roles/run.admin",
+    "roles/logging.admin",
+    "roles/monitoring.admin",
+    "roles/iap.admin",
+  ]
+}
+
+resource "google_project_iam_member" "ci_terraform" {
+  for_each = toset(local.ci_project_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = google_service_account.ci.member
+}
