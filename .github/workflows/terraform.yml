@@ -1,0 +1,127 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to perform"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      confirm_destroy:
+        description: "Type DESTROY to confirm (required for destroy)"
+        required: false
+        type: string
+
+
+env:
+  WIF_PROVIDER: projects/345093621666/locations/global/workloadIdentityPools/github-actions/providers/aegis-repo
+  CI_SA: aegis-ci@aegis-prod-0926.iam.gserviceaccount.com
+  TF_VAR_project_id: ${{ vars.TF_PROJECT_ID }}
+  TF_VAR_project_number: ${{ vars.TF_PROJECT_NUMBER }}
+  TF_VAR_region: ${{ vars.TF_REGION }}
+  TF_VAR_iap_user_email: ${{ vars.TF_IAP_USER_EMAIL }}
+  TF_VAR_github_owner_id: ${{ vars.TF_GITHUB_OWNER_ID }}
+  TF_VAR_github_repo: ${{ github.repository }}
+
+jobs:
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Validate destroy confirmation
+        if: inputs.action == 'destroy' && inputs.confirm_destroy != 'DESTROY'
+        run: |
+          echo "::error::Destroy requires confirm_destroy set to 'DESTROY'"
+          exit 1
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SA }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        if: inputs.action == 'plan' || inputs.action == 'apply'
+        run: terraform plan
+
+      - name: Terraform Plan (Destroy)
+        if: inputs.action == 'destroy'
+        run: terraform plan -destroy
+
+  apply:
+    name: Terraform Apply
+    if: inputs.action == 'apply'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    environment: production-infra
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SA }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  destroy:
+    name: Terraform Destroy
+    if: inputs.action == 'destroy'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    environment: production-infra
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+
+      - id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SA }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: terraform apply -destroy -auto-approve
