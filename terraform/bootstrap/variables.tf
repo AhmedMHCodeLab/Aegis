@@ -32,6 +32,12 @@ variable "wif_provider_id" {
   default     = "aegis-repo"
 }
 
+variable "lb_address_name" {
+  description = "Name of the reserved global address fronting the load balancer"
+  type        = string
+  default     = "aegis-lb-ip"
+}
+
 variable "github_owner_id" {
   description = "Numeric GitHub user/org ID for the WIF attribute condition (prevents typosquatting)"
   type        = string

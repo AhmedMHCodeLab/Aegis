@@ -1,9 +1,5 @@
-# --- Static IP ---
-
-resource "google_compute_global_address" "main" {
-  project = var.project_id
-  name    = "${var.service_name}-lb-ip"
-}
+# The global address is owned by terraform/bootstrap so that destroying and
+# rebuilding this stack does not reallocate the IP and break DNS.
 
 # --- SSL ---
 
@@ -142,7 +138,7 @@ resource "google_compute_global_forwarding_rule" "main" {
   project               = var.project_id
   name                  = "${var.service_name}-https-rule"
   target                = google_compute_target_https_proxy.main.id
-  ip_address            = google_compute_global_address.main.address
+  ip_address            = var.lb_ip_address
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 }

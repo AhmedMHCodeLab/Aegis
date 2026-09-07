@@ -1,6 +1,6 @@
 output "lb_ip_address" {
-  description = "Static IP of the load balancer. Create a Route 53 A record pointing the domain here."
-  value       = google_compute_global_address.main.address
+  description = "Static IP of the load balancer. The domain's A record points here."
+  value       = var.lb_ip_address
 }
 
 output "lb_url" {

@@ -25,6 +25,11 @@ variable "cloud_run_service_name" {
   type        = string
 }
 
+variable "lb_ip_address" {
+  description = "Reserved global IP, created by terraform/bootstrap"
+  type        = string
+}
+
 variable "enable_cloud_armor" {
   description = "Create Cloud Armor security policy. Requires SECURITY_POLICIES quota > 0."
   type        = bool

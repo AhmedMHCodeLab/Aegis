@@ -79,6 +79,7 @@ terraform/bootstrap/     applied once, never destroyed
   aegis-key              CMEK for images, revisions, secrets
   aegis-attestor         Binary Authorization signing key
   WIF pool + provider
+  aegis-lb-ip            reserved global address behind the DNS A record
 
 terraform/               destroy and apply freely
   data "google_kms_key_ring" "main"          {...}
@@ -98,6 +99,28 @@ stops a destroy from quietly rendering the CMEK key unusable and taking every
 CMEK-encrypted resource with it. For the WIF pool it is a genuine choice: the pool
 *can* be deleted, but deleting it re-enters the 30-day reservation trap, so the
 layer refuses.
+
+## The charter widened once, deliberately
+
+The layer was originally justified by a hard constraint: GCP physically refuses to
+recreate these resources. The reserved global address does not meet that bar. It
+deletes and recreates perfectly well.
+
+It was added anyway, on a second and weaker criterion: **external systems point at
+it.** A rebuild reallocates the address, and the DNS A record silently keeps
+pointing at an IP that no longer exists. The managed certificate then reports
+`FAILED_NOT_VISIBLE`, the domain stops resolving to anything, and the only repair
+is a human noticing and editing DNS by hand. That is precisely the class of
+undocumented manual step this project is supposed to eliminate, and it recurs on
+every single teardown.
+
+This is worth stating plainly because it is a slope. "GCP will not let me recreate
+this" is objective and admits few members. "Something outside Terraform depends on
+this being stable" is a judgement call, and almost any resource can be argued into
+it. The test applied here, and the one to apply next time: does an external system
+hold a reference that breaks silently, and is repairing it manual? Both true for
+the IP. Neither is true for, say, the Cloud Run service or the backend service,
+which are addressed by name rather than by a value someone copied elsewhere.
 
 ## Consequences
 

@@ -1,3 +1,8 @@
+output "lb_ip_address" {
+  description = "Reserved global IP the DNS A record points at"
+  value       = google_compute_global_address.lb.address
+}
+
 output "key_ring_id" {
   description = "ID of the KMS key ring"
   value       = google_kms_key_ring.main.id

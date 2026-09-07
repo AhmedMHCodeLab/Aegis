@@ -16,6 +16,11 @@ data "google_kms_crypto_key" "attestor" {
   key_ring = data.google_kms_key_ring.main.id
 }
 
+data "google_compute_global_address" "lb" {
+  project = var.project_id
+  name    = var.lb_address_name
+}
+
 data "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
   workload_identity_pool_id = var.wif_pool_id

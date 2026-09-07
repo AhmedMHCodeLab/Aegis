@@ -1,3 +1,12 @@
+resource "google_compute_global_address" "lb" {
+  project = var.project_id
+  name    = var.lb_address_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "google_kms_key_ring" "main" {
   project  = var.project_id
   name     = var.key_ring_name

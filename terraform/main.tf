@@ -68,6 +68,7 @@ module "dns" {
 
   project_id             = var.project_id
   region                 = var.region
+  lb_ip_address          = data.google_compute_global_address.lb.address
   cloud_run_service_name = module.cloud_run.service_name
 }
 

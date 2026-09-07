@@ -34,6 +34,12 @@ variable "key_ring_name" {
   default     = "aegis"
 }
 
+variable "lb_address_name" {
+  description = "Name of the reserved global address created by terraform/bootstrap"
+  type        = string
+  default     = "aegis-lb-ip"
+}
+
 variable "wif_pool_id" {
   description = "Workload Identity Pool ID created by terraform/bootstrap"
   type        = string
