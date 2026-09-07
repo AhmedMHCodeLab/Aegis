@@ -1,15 +1,20 @@
+import hashlib
+import hmac
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .engine import load_rules, evaluate_all
 from .schemas import CheckRequest, CheckResponse, RulesResponse, HealthResponse
+
+SIGNING_KEY = os.environ.get("AEGIS_SIGNING_KEY")
 
 
 class JsonFormatter(logging.Formatter):
@@ -59,7 +64,7 @@ async def ui(request: Request):
     )
 
 
-@app.post("/v1/check", response_model=CheckResponse)
+@app.post("/v1/check")
 async def check(req: CheckRequest):
     results = evaluate_all(rules, req.config)
     passed = sum(1 for r in results if r["status"] == "PASS")
@@ -74,10 +79,16 @@ async def check(req: CheckRequest):
         "fail": failed,
         "score": score,
     }})
-    return {
+    body = {
         "summary": {"total": total, "pass": passed, "fail": failed, "warn": warned, "score": score},
         "results": results,
     }
+    content = json.dumps(body, separators=(",", ":"), sort_keys=True)
+    headers = {}
+    if SIGNING_KEY:
+        sig = hmac.new(SIGNING_KEY.encode(), content.encode(), hashlib.sha256).hexdigest()
+        headers["X-Aegis-Signature"] = f"sha256={sig}"
+    return Response(content=content, media_type="application/json", headers=headers)
 
 
 @app.get("/v1/rules", response_model=RulesResponse)
