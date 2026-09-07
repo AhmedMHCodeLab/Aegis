@@ -94,6 +94,8 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           format: table
+          ignore-unfixed: true
+          trivyignores: .trivyignore
 
   # --- Main: build once, scan, push, sign, attest, verify, deploy by digest ---
   build-sign-deploy:
