@@ -1,3 +1,16 @@
 .venv/
 __pycache__/
 .pytest_cache/
+
+/ignore
+CLAUDE.md
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform/environments/*/terraform.tfvars
+!terraform/terraform.tfvars.example
+tfplan
+*.tfplan
+crash.log
