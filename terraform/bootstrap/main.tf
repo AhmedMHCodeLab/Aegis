@@ -1,6 +1,7 @@
 resource "google_compute_global_address" "lb" {
-  project = var.project_id
-  name    = var.lb_address_name
+  project    = var.project_id
+  name       = var.lb_address_name
+  depends_on = [google_project_service.required]
 
   lifecycle {
     prevent_destroy = true
@@ -8,9 +9,10 @@ resource "google_compute_global_address" "lb" {
 }
 
 resource "google_kms_key_ring" "main" {
-  project  = var.project_id
-  name     = var.key_ring_name
-  location = var.region
+  project    = var.project_id
+  name       = var.key_ring_name
+  location   = var.region
+  depends_on = [google_project_service.required]
 
   lifecycle {
     prevent_destroy = true
@@ -47,6 +49,7 @@ resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = var.wif_pool_id
   display_name              = "GitHub Actions"
   description               = "OIDC identity pool for GitHub Actions CI/CD"
+  depends_on                = [google_project_service.required]
 
   lifecycle {
     prevent_destroy = true

@@ -100,6 +100,24 @@ CMEK-encrypted resource with it. For the WIF pool it is a genuine choice: the po
 *can* be deleted, but deleting it re-enters the 30-day reservation trap, so the
 layer refuses.
 
+## Three reasons something lives here
+
+The layer now admits members on three distinct grounds, and they are worth keeping
+separate because they are not equally strong.
+
+**1. GCP refuses to recreate it.** The key ring, both crypto keys, the WIF pool and
+its provider. Objective, and the original justification for the split.
+
+**2. An external system holds a reference that breaks silently.** The reserved
+load balancer address. See below.
+
+**3. The main stack cannot be applied without it.** API enablement. Sixteen
+`google_project_service` resources in `apis.tf`. These are ordinary, deletable
+resources; they live here because bootstrap runs first by definition, and putting
+them in the main stack would mean hanging a `depends_on` off every module to stop
+each one racing the API it needs. They carry `disable_on_destroy = false`, so
+removing one forgets it rather than switching it off under a running service.
+
 ## The charter widened once, deliberately
 
 The layer was originally justified by a hard constraint: GCP physically refuses to
