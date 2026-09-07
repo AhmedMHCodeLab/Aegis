@@ -1,0 +1,6 @@
+project_id      = "YOUR_PROJECT_ID"
+project_number  = "YOUR_PROJECT_NUMBER"
+region          = "me-central1"
+iap_user_email  = "your-email@example.com"
+github_owner_id = "YOUR_GITHUB_NUMERIC_USER_ID"
+github_repo     = "YourOrg/YourRepo"
