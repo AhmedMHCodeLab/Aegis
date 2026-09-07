@@ -686,8 +686,9 @@ const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentC
 
 function fmt(value) {
   if (value === null || value === undefined) return "not set";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
+  // Evidence values are submitted config, and both call sites concatenate this
+  // into innerHTML. Escaping here keeps a config value from becoming markup.
+  return escHtml(typeof value === "string" ? value : JSON.stringify(value));
 }
 
 function renderFindings(results) {
