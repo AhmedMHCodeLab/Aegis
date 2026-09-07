@@ -58,6 +58,15 @@ resource "google_kms_crypto_key_iam_member" "ci_signer" {
   member        = var.ci_sa_member
 }
 
+# Creating an attestation creates an Artifact Analysis occurrence and attaches it
+# to the note. Attaching is authorised on the note below; creating the occurrence
+# is only authorisable at the project, so this cannot be scoped narrower.
+resource "google_project_iam_member" "ci_occurrences" {
+  project = var.project_id
+  role    = "roles/containeranalysis.occurrences.editor"
+  member  = var.ci_sa_member
+}
+
 resource "google_container_analysis_note_iam_member" "ci_attacher" {
   project = var.project_id
   note    = google_container_analysis_note.attestor.name
