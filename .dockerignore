@@ -1,7 +1,15 @@
 .venv/
 .git/
+.github/
 .pytest_cache/
 __pycache__/
 tests/
 Docs/
+ignore/
+terraform/
 *.md
+*.tfvars
+*.tfstate*
+.terraform/
+.dockerignore
+.gitignore
