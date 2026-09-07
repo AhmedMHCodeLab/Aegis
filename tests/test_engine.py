@@ -72,6 +72,10 @@ class TestOperators:
         ("1.2", "1.2", True),
         ("1.0", "1.2", False),
         (None, "1.2", False),
+        # Unparseable values fail closed instead of raising.
+        ("TLSv1.2", "1.2", False),
+        (["1.2"], "1.2", False),
+        ({"v": 1.2}, "1.2", False),
     ])
     def test_gte(self, actual, expected, result):
         assert OPERATORS["gte"](actual, expected) is result

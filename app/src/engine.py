@@ -3,13 +3,22 @@ import yaml
 from pathlib import Path
 
 
+def _gte(actual, expected):
+    # A value that cannot be read as a number is not evidence of compliance, so it
+    # fails rather than raising. "TLSv1.2" is a plausible submission, not a crash.
+    try:
+        return float(actual) >= float(expected)
+    except (TypeError, ValueError):
+        return False
+
+
 OPERATORS = {
     "equals": lambda actual, expected: actual == expected,
     "not_equals": lambda actual, expected: actual != expected,
     "not_in": lambda actual, expected: actual not in expected,
     "exists": lambda actual, _: actual is not None and actual != [] and actual != "",
     "not_exists": lambda actual, _: actual is None or actual == [] or actual == "",
-    "gte": lambda actual, expected: float(actual) >= float(expected) if actual is not None else False,
+    "gte": _gte,
 }
 
 

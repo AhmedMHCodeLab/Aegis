@@ -30,6 +30,17 @@ class TestCheck:
         summary = client.post("/v1/check", json=load_fixture("full_secure.json")).json()["summary"]
         assert summary == {"total": 13, "pass": 13, "fail": 0, "warn": 0, "score": "100%"}
 
+    def test_unparseable_comparison_value_fails_the_control_instead_of_the_request(self, client):
+        # "TLSv1.2" is a plausible submission. It used to raise ValueError in the gte
+        # operator and return 500, which is both a defect and free error-rate noise.
+        response = client.post("/v1/check", json={
+            "resource_type": "cloud_run_service",
+            "config": {"tls_min_version": "TLSv1.2"},
+        })
+        assert response.status_code == 200
+        cr004 = [r for r in response.json()["results"] if r["rule_id"] == "CR-004"][0]
+        assert cr004["status"] == "FAIL"
+
     def test_summary_uses_the_pass_alias_not_passed(self, client, load_fixture):
         summary = client.post("/v1/check", json=load_fixture("full_secure.json")).json()["summary"]
         assert "pass" in summary
