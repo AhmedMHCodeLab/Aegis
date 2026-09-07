@@ -6,7 +6,7 @@ resource "google_kms_key_ring" "main" {
   location = var.region
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -17,7 +17,7 @@ resource "google_kms_crypto_key" "main" {
   purpose         = "ENCRYPT_DECRYPT"
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 

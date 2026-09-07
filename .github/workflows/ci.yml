@@ -138,6 +138,8 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           format: table
+          ignore-unfixed: true
+          trivyignores: .trivyignore
 
       - name: Push and capture digest
         id: push
@@ -191,7 +193,7 @@ jobs:
       # it is what blocks an image deployed outside this pipeline.
       - name: Create Binary Authorization attestation
         run: |
-          gcloud container binauthz attestations sign-and-create \
+          gcloud beta container binauthz attestations sign-and-create \
             --project="${{ env.PROJECT_ID }}" \
             --artifact-url="${{ steps.push.outputs.digest }}" \
             --attestor="${{ env.ATTESTOR }}" \

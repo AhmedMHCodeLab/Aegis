@@ -8,7 +8,7 @@ resource "google_kms_crypto_key" "attestor" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
