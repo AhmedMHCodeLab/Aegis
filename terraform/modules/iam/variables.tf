@@ -13,6 +13,11 @@ variable "wif_pool_name" {
   type        = string
 }
 
+variable "tfstate_bucket" {
+  description = "GCS bucket holding Terraform state. CI cannot run init without object access to it."
+  type        = string
+}
+
 variable "github_repo" {
   description = "GitHub repository in owner/repo format for WIF SA binding"
   type        = string

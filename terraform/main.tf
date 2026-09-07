@@ -18,10 +18,11 @@ module "security" {
 module "iam" {
   source = "./modules/iam"
 
-  project_id    = var.project_id
-  crypto_key_id = data.google_kms_crypto_key.main.id
-  wif_pool_name = data.google_iam_workload_identity_pool.github.name
-  github_repo   = var.github_repo
+  project_id     = var.project_id
+  crypto_key_id  = data.google_kms_crypto_key.main.id
+  wif_pool_name  = data.google_iam_workload_identity_pool.github.name
+  github_repo    = var.github_repo
+  tfstate_bucket = "${var.project_id}-tfstate"
 }
 
 module "artifact_registry" {
@@ -37,8 +38,20 @@ module "artifact_registry" {
   depends_on = [module.security]
 }
 
+# Direct VPC egress makes Cloud Run reserve addresses in the subnet, and GCP
+# releases them asynchronously some time after the service is deleted. On destroy
+# Terraform reaches the subnet before that release lands and fails with
+# resourceInUseByAnotherResource. Sitting between the two modules means the subnet
+# is destroyed only after this pause. The duration is empirical: the release delay
+# is not documented anywhere Google publishes.
+resource "time_sleep" "vpc_egress_release" {
+  depends_on       = [module.networking]
+  destroy_duration = "180s"
+}
+
 module "cloud_run" {
-  source = "./modules/cloud_run"
+  source     = "./modules/cloud_run"
+  depends_on = [time_sleep.vpc_egress_release]
 
   project_id = var.project_id
   region     = var.region

@@ -40,6 +40,14 @@ resource "google_service_account_iam_member" "wif_ci_impersonation" {
   member             = "principalSet://iam.googleapis.com/${var.wif_pool_name}/attribute.repository/${var.github_repo}"
 }
 
+# Without this CI fails at "terraform init", before it evaluates any
+# configuration, because the GCS backend cannot list the state objects.
+resource "google_storage_bucket_iam_member" "ci_state" {
+  bucket = var.tfstate_bucket
+  role   = "roles/storage.objectAdmin"
+  member = google_service_account.ci.member
+}
+
 locals {
   ci_project_roles = [
     "roles/compute.networkAdmin",
