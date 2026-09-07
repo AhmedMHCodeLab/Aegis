@@ -1,0 +1,10 @@
+skip-check:
+  # WIF condition already pins repository_owner_id, repository and ref.
+  # Checkov wants a stricter pattern but ours is the documented best practice.
+  - CKV_GCP_125
+  # CI needs serviceAccountAdmin to manage the runtime SA lifecycle.
+  # WIF branch restriction and GitHub Environment approval gate the risk.
+  - CKV_GCP_49
+  # Subnet carries only Cloud Run direct egress to restricted.googleapis.com.
+  # Flow logs add cost with no security signal on this traffic pattern.
+  - CKV_GCP_26

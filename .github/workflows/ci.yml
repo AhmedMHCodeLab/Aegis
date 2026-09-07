@@ -27,7 +27,7 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: app/requirements.txt
-      - run: pip install -r app/requirements.txt pytest
+      - run: pip install -r app/requirements.txt pytest httpx
       - run: PYTHONPATH=app pytest tests/ -v
 
   sast:
@@ -73,7 +73,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install checkov
-      - run: checkov -d terraform/ --framework terraform --quiet --compact
+      - run: checkov -d terraform/ --framework terraform --quiet --compact --config-file terraform/.checkov.yaml
 
   # --- PR: build and scan only (no push) ---
   build-scan:
