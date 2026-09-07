@@ -56,6 +56,14 @@ resource "google_logging_metric" "iam_changes" {
   }
 }
 
+# Cloud Monitoring registers a log-based metric descriptor lazily, up to 10
+# minutes after Logging creates the metric. Referencing it before then fails
+# with "does not represent a known descriptor".
+resource "time_sleep" "metric_descriptor_propagation" {
+  depends_on      = [google_logging_metric.iam_changes]
+  create_duration = "10m"
+}
+
 # --- Notification Channel ---
 
 resource "google_monitoring_notification_channel" "email" {
@@ -74,6 +82,7 @@ resource "google_monitoring_alert_policy" "iam_changes" {
   project      = var.project_id
   display_name = "IAM policy changed"
   combiner     = "OR"
+  depends_on   = [time_sleep.metric_descriptor_propagation]
 
   conditions {
     display_name = "IAM SetIamPolicy detected"
