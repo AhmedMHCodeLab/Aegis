@@ -1,0 +1,14 @@
+{
+  "resource_type": "cloud_run_service",
+  "config": {
+    "network": {
+      "network_interfaces": [
+        {
+          "network": "aegis-vpc",
+          "subnetwork": "aegis-run-me-central1"
+        }
+      ],
+      "egress_setting": "private-ranges-only"
+    }
+  }
+}

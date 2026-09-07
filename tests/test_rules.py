@@ -112,6 +112,31 @@ class TestFailClosedHandlers:
         assert status_by_id(rules, {})["IAM-003"] == "FAIL"
 
 
+class TestNetworkEgressMechanisms:
+    """NET-001 asserts the outcome (egress traverses a controlled VPC), not one product."""
+
+    def test_direct_vpc_egress_satisfies_the_control(self, rules, config_of):
+        results = {r["rule_id"]: r for r in evaluate_all(rules, config_of("network_direct_egress.json"))}
+        assert results["NET-001"]["status"] == "PASS"
+        assert results["NET-001"]["evidence"]["actual"] == "direct VPC egress network interface"
+
+    def test_connector_still_satisfies_the_control(self, rules, config_of):
+        results = {r["rule_id"]: r for r in evaluate_all(rules, config_of("network_secure.json"))}
+        assert results["NET-001"]["status"] == "PASS"
+        assert results["NET-001"]["evidence"]["actual"] == "Serverless VPC Access connector"
+
+    def test_declared_network_with_neither_mechanism_fails(self, rules):
+        config = {"network": {"egress_setting": "private-ranges-only"}}
+        results = {r["rule_id"]: r for r in evaluate_all(rules, config)}
+        assert results["NET-001"]["status"] == "FAIL"
+        assert results["NET-001"]["evidence"]["actual"] == "no VPC egress path declared"
+
+    def test_absent_network_block_fails_closed(self, rules):
+        results = {r["rule_id"]: r for r in evaluate_all(rules, {})}
+        assert results["NET-001"]["status"] == "FAIL"
+        assert results["NET-001"]["evidence"]["actual"] == "network not declared"
+
+
 @pytest.mark.parametrize("category,secure_fixture", [
     ("Cloud Run", "cloud_run_secure.json"),
     ("IAM", "iam_secure.json"),
