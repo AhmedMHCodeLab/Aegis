@@ -1,19 +1,5 @@
-resource "google_kms_crypto_key" "attestor" {
-  name     = "aegis-attestor"
-  key_ring = var.key_ring_id
-  purpose  = "ASYMMETRIC_SIGN"
-
-  version_template {
-    algorithm = "EC_SIGN_P256_SHA256"
-  }
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
 data "google_kms_crypto_key_version" "attestor" {
-  crypto_key = google_kms_crypto_key.attestor.id
+  crypto_key = var.attestor_key_id
 }
 
 resource "google_container_analysis_note" "attestor" {
@@ -67,7 +53,7 @@ resource "google_binary_authorization_policy" "main" {
 }
 
 resource "google_kms_crypto_key_iam_member" "ci_signer" {
-  crypto_key_id = google_kms_crypto_key.attestor.id
+  crypto_key_id = var.attestor_key_id
   role          = "roles/cloudkms.signerVerifier"
   member        = var.ci_sa_member
 }

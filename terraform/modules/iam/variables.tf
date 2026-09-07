@@ -8,8 +8,8 @@ variable "crypto_key_id" {
   type        = string
 }
 
-variable "github_owner_id" {
-  description = "Numeric GitHub user/org ID for WIF attribute condition (prevents typosquatting)"
+variable "wif_pool_name" {
+  description = "Full resource name of the WIF pool, created by terraform/bootstrap"
   type        = string
 }
 

@@ -27,3 +27,15 @@ variable "github_repo" {
   description = "GitHub repository in owner/repo format"
   type        = string
 }
+
+variable "key_ring_name" {
+  description = "Name of the KMS key ring created by terraform/bootstrap"
+  type        = string
+  default     = "aegis"
+}
+
+variable "wif_pool_id" {
+  description = "Workload Identity Pool ID created by terraform/bootstrap"
+  type        = string
+  default     = "github-actions"
+}

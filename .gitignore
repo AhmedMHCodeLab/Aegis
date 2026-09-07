@@ -10,7 +10,8 @@ CLAUDE.md
 *.tfstate.*
 .terraform/
 terraform/environments/*/terraform.tfvars
-!terraform/terraform.tfvars.example
+terraform/bootstrap/terraform.tfvars
+!*.tfvars.example
 tfplan
 *.tfplan
 crash.log

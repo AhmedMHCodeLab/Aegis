@@ -23,7 +23,3 @@ output "ci_sa_name" {
   value       = google_service_account.ci.name
 }
 
-output "wif_provider_name" {
-  description = "Full resource name of the WIF provider, used in GitHub Actions auth step"
-  value       = google_iam_workload_identity_pool_provider.github.name
-}

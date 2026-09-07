@@ -13,16 +13,9 @@ variable "region" {
   type        = string
 }
 
-variable "key_ring_name" {
-  description = "Name of the KMS key ring"
+variable "crypto_key_id" {
+  description = "ID of the CMEK key, created by terraform/bootstrap"
   type        = string
-  default     = "aegis"
-}
-
-variable "rotation_period" {
-  description = "Key rotation period in seconds. 90 days = 7776000s."
-  type        = string
-  default     = "7776000s"
 }
 
 variable "cloud_run_sa_email" {

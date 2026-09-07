@@ -1,25 +1,5 @@
-# --- KMS ---
-
-resource "google_kms_key_ring" "main" {
-  project  = var.project_id
-  name     = var.key_ring_name
-  location = var.region
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-resource "google_kms_crypto_key" "main" {
-  name            = "aegis-key"
-  key_ring        = google_kms_key_ring.main.id
-  rotation_period = var.rotation_period
-  purpose         = "ENCRYPT_DECRYPT"
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
+# The key ring and crypto key are owned by terraform/bootstrap and arrive here
+# as crypto_key_id. Everything below can be freely destroyed and recreated.
 
 # Artifact Registry service agent: grant CMEK access
 resource "google_project_service_identity" "artifact_registry" {
@@ -29,7 +9,7 @@ resource "google_project_service_identity" "artifact_registry" {
 }
 
 resource "google_kms_crypto_key_iam_member" "artifact_registry" {
-  crypto_key_id = google_kms_crypto_key.main.id
+  crypto_key_id = var.crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.artifact_registry.email}"
 }
@@ -42,7 +22,7 @@ resource "google_project_service_identity" "cloud_run" {
 }
 
 resource "google_kms_crypto_key_iam_member" "cloud_run" {
-  crypto_key_id = google_kms_crypto_key.main.id
+  crypto_key_id = var.crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.cloud_run.email}"
 }
@@ -55,9 +35,21 @@ resource "google_project_service_identity" "secret_manager" {
 }
 
 resource "google_kms_crypto_key_iam_member" "secret_manager" {
-  crypto_key_id = google_kms_crypto_key.main.id
+  crypto_key_id = var.crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.secret_manager.email}"
+}
+
+# A CMEK grant is not usable the instant it is written. Consumers that encrypt
+# with the key must wait for the binding to propagate or they fail with
+# "Permission denied on Cloud KMS key".
+resource "time_sleep" "cmek_iam_propagation" {
+  depends_on = [
+    google_kms_crypto_key_iam_member.artifact_registry,
+    google_kms_crypto_key_iam_member.cloud_run,
+    google_kms_crypto_key_iam_member.secret_manager,
+  ]
+  create_duration = "60s"
 }
 
 # --- Signing Key Secret ---
@@ -67,15 +59,16 @@ resource "random_bytes" "signing_key" {
 }
 
 resource "google_secret_manager_secret" "signing_key" {
-  project   = var.project_id
-  secret_id = "aegis-signing-key"
+  project    = var.project_id
+  secret_id  = "aegis-signing-key"
+  depends_on = [time_sleep.cmek_iam_propagation]
 
   replication {
     user_managed {
       replicas {
         location = var.region
         customer_managed_encryption {
-          kms_key_name = google_kms_crypto_key.main.id
+          kms_key_name = var.crypto_key_id
         }
       }
     }

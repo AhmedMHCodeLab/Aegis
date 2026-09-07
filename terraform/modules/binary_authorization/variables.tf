@@ -3,8 +3,8 @@ variable "project_id" {
   type        = string
 }
 
-variable "key_ring_id" {
-  description = "ID of the KMS key ring that holds the attestor signing key"
+variable "attestor_key_id" {
+  description = "ID of the asymmetric signing key, created by terraform/bootstrap"
   type        = string
 }
 

@@ -251,6 +251,7 @@ Infrastructure:
 - [**IAP Placement**](Docs/IAP-Placement.md) -> Why IAP moved from the backend service onto Cloud Run, reversing the original decision
 - [**Edge vs App Layer Auth**](Docs/Edge-vs-App-Layer-Auth.md) -> Where the authorisation boundary sits and what the application is still responsible for
 - [**Artifact Admission**](Docs/Artifact-Admission.md) -> Why the image carries two signatures, and why Binary Authorization cannot read the keyless one
+- [**Bootstrap Layer**](Docs/Bootstrap-Layer.md) -> Why five resources live in their own root, and why a stack containing a KMS key ring can never be fully destroyable
 
 Security posture:
 
