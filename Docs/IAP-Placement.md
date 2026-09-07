@@ -1,4 +1,4 @@
-# ADR: IAP on Cloud Run directly, load balancer kept for Cloud Armor and TLS
+# ADR: IAP on Cloud Run directly, load balancer kept for TLS and the custom domain
 
 **Status:** Accepted (supersedes the original decision below)
 **Scope:** `terraform/modules/dns/`, `terraform/modules/security/`, `terraform/modules/cloud_run/`
@@ -32,6 +32,12 @@ docs frame IAP-direct as an alternative *to* provisioning a load balancer. That 
 service whose only reason to have an LB is IAP. It doesn't hold once you register that Cloud Armor,
 the managed cert, and the custom domain are separate reasons to keep the LB that have nothing to do with
 where the IAP check lives. The original "Alternatives rejected" section below conflated the two.
+
+> **One of those three reasons did not survive contact with the project.** Cloud Armor is not deployed,
+> because the project's quota for it is zero and the increase request was refused. The decision here is
+> unaffected, since IAP-direct was never contingent on the WAF, but the justification for keeping the
+> load balancer is now two reasons rather than three: the managed certificate and the custom domain.
+> Both are sufficient on their own. See [Security-Exceptions.md](Security-Exceptions.md).
 
 ## What this changes mechanically
 
@@ -68,13 +74,14 @@ cannot provide:
 
 | Control | Requires the LB | Consequence of removing it |
 |---|---|---|
-| Cloud Armor WAF and rate limiting | Attaches to a backend service | No WAF, no rate limit. T-04 control 2 disappears |
+| ~~Cloud Armor WAF and rate limiting~~ **not deployed** | Attaches to a backend service | Already the case: quota is zero. T-04 control 2 has disappeared regardless of the LB |
 | Google-managed SSL certificate | Belongs to the target HTTPS proxy | No custom domain TLS |
 | SSL policy, TLS 1.2 minimum | Attached to the proxy | No control over cipher/version floor |
 | Custom domain via the Route 53 A record | Points at the LB's global IP | Service reachable only at `run.app` |
 
-Removing the LB to "simplify" would cost all four. None of them depend on where the IAP check lives, so
-none of them are reasons to prefer IAP-on-backend-service over IAP-on-Cloud-Run.
+Removing the LB to "simplify" would cost the three that are actually deployed. None of them depend on
+where the IAP check lives, so none of them are reasons to prefer IAP-on-backend-service over
+IAP-on-Cloud-Run.
 
 ## Consequences
 
@@ -118,7 +125,9 @@ network-shape question O-1 was trying to answer is now moot; the identity bounda
   for an authorised user after sign-in
 - `curl https://<service>.run.app/health` also returns the IAP sign-in redirect or a 403, not a raw
   Cloud Run response, confirming `run.app` is behind IAP, not just filtered by ingress
-- A SQLi payload in a query parameter through the LB path returns 403 attributed to Cloud Armor, not IAP
+- ~~A SQLi payload through the LB path returns 403 attributed to Cloud Armor~~ **Not testable.** Cloud
+  Armor is not deployed, so there is nothing to attribute a 403 to. Reinstate this check if quota is
+  ever granted
   or the app
 - SSL Labs reports A or A+ with TLS 1.2 as the floor
 - `gcloud run services get-iam-policy` shows `roles/run.invoker` held only by IAP's service agent, no

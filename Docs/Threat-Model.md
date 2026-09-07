@@ -1,10 +1,22 @@
 # Threat Model: Aegis Compliance Checkpoint
 
-**Status:** Accepted for Session 1. Re-validate after Sessions 2 and 3.
+**Status:** Accepted for Session 1, revised once infrastructure was applied.
 **Scope:** `aegis-prod-0926`, `me-central1`. The service, its edge, its identities, its build path.
 **Method:** STRIDE applied per trust boundary.
-**System version:** app `v0.1.0` (`fb8aef7`). No infrastructure is applied yet, so every infrastructure
-control below is a commitment to Session 2 or 3, not an observation. Section 9 separates the two.
+**System version:** app `v0.1.0`. Infrastructure is applied and the service is live behind IAP.
+
+> **Two controls named throughout this document are not deployed.** Read it with both in mind.
+>
+> **Cloud Armor does not exist.** No WAF, no rate limiting, no security policy. Every reference below
+> to Cloud Armor rules, rate limiting, or WAF body inspection describes a control that was designed and
+> could not be provisioned: the project's Cloud Armor quotas are zero and the increase request was
+> refused outright. This affects T-03 control 3 and T-04 control 2 directly.
+>
+> **IAP JWT verification does not exist.** T-02 assumes the application verifies the IAP assertion. It
+> does not. There is no `IAP_AUDIENCE` and no verification code. Only Cloud Run invoker IAM, restricted
+> to IAP's service agent, stands between an unauthenticated caller and the container.
+>
+> Both are recorded with their residual risk in [Security-Exceptions.md](Security-Exceptions.md).
 
 ## 1. Assets
 
@@ -61,8 +73,8 @@ in this design live in **another cloud**.
    │             │                   │  global external Application LB      │
    └─────────────┘                   │    · Google-managed SSL certificate  │
         ▲                            │    · SSL policy, TLS 1.2 minimum     │
-        │                            │    · Cloud Armor: OWASP preconfig    │
-        │ (9) findings JSON,         │      rules + rate limiting           │
+        │                            │    · NO Cloud Armor: no WAF and      │
+        │ (9) findings JSON,         │      no rate limiting (quota)        │
         │     rendered in the DOM    └──────────────────┬───────────────────┘
         │                                               │ (3)
    ═════╪═══ TB-7 browser DOM ══════   ═══════ TB-1 ════╪═══ public internet edge
@@ -116,7 +128,7 @@ in this design live in **another cloud**.
 
 | TB | Boundary | Enforcement |
 |---|---|---|
-| TB-1 | Public internet → Google edge | Cloud Armor, SSL policy |
+| TB-1 | Public internet → Google edge | SSL policy (TLS 1.2, RESTRICTED). Cloud Armor is not deployed |
 | TB-2 | Unauthenticated → authenticated | IAP + Google sign-in |
 | TB-3 | Google edge → tenant workload | Cloud Run ingress + invoker IAM + IAP JWT verification |
 | TB-4 | Workload identity → managed data services | Per-resource IAM bindings |
@@ -131,7 +143,7 @@ AWS, and rendering evidence client-side.
 |---|---|---|---|
 | 1 | Resolver → Route 53 | Hostname → LB IP | Also the cert renewal validation path |
 | 2 | Browser → GFE | A1 in POST body | TLS terminates at the GFE |
-| 3 | GFE → IAP | Request + client attributes | Post-WAF |
+| 3 | GFE → IAP | Request + client attributes | No WAF in path |
 | 4 | IAP → Cloud Run | Request + `x-goog-iap-jwt-assertion` | Client-supplied `x-goog-*` headers stripped by IAP |
 | 5 | Cloud Run → Secret Manager | A4 | Runtime SA, per-secret binding |
 | 6 | Cloud Run → Cloud KMS | Key operations | Indirect, for Artifact Registry CMEK |
@@ -173,7 +185,7 @@ raw Cloud Run response, confirming `run.app` is behind IAP rather than merely in
 result through the LB path.
 
 ### T-02 · The application cannot distinguish an IAP-authenticated request from a direct one
-**S · TB-2/3 · L:Low I:High · Residual: Low (was Medium before D2)**
+**S · TB-2/3 · L:Low I:High · Residual: Medium — D2 was accepted and never built**
 
 The app has no middleware and no identity handling, so it serves anything reaching its socket. Correct
 only while T-01 holds perfectly and forever. If IAP is disabled during an incident, or a revision ships
@@ -190,7 +202,11 @@ state this outcome explicitly, it follows from the IAM model, not from a cited g
 control (D2) still stands: `ingress = all` shipping with a stray invoker binding is exactly the scenario
 this section exists for, and the app has no way to detect it on its own.
 
-**Control (decision D2).** Verify `x-goog-iap-jwt-assertion`, env-gated on `IAP_AUDIENCE`. Google
+**Control (decision D2). NOT IMPLEMENTED.** There is no `IAP_AUDIENCE`, no `google-auth` dependency and
+no verification code anywhere in `app/`. The design below was accepted and never built, so this threat
+currently rests entirely on the platform-side reasoning above. The residual is Medium, not Low.
+
+The accepted design was: verify `x-goog-iap-jwt-assertion`, env-gated on `IAP_AUDIENCE`. Google
 documents this as the answer: "Signed headers provide secondary security in case someone bypasses IAP",
 and without it "an attacker can forge the IAP unsigned identity headers,
 `x-goog-authenticated-user-{email,id}`" ([source](https://docs.cloud.google.com/iap/docs/signed-headers-howto)).
@@ -241,10 +257,12 @@ assessment run in that session, including other clients' A1 and A2.
 3. The script executes from the **response**. A request-side WAF inspects the wrong direction for a DOM
    sink.
 
-**Controls.** (1) Escape in `fmt()` or assign via `textContent`. This is the fix. (2) CSP, whose real
-cost is that `index.html` has inline `<style>`/`<script>`, so it needs nonces or extraction. (3) Cloud
-Armor XSS rules with JSON parsing and an explicit inspection size, as defence in depth only. (4) Request
-size cap below the inspection limit, which makes control 3 complete for bodies the service accepts.
+**Controls.** (1) Escape in `fmt()` or assign via `textContent`. This is the fix, and it is applied.
+(2) CSP, whose real cost is that `index.html` has inline `<style>`/`<script>`, so it needs nonces or
+extraction. Deferred. (3) Cloud Armor XSS rules were to be defence in depth only. **Not deployed**, and
+the three reasons above are exactly why that costs little here: the WAF was never the control for a
+response-side sink. (4) Request size cap, deferred, and no longer coupled to a WAF inspection limit
+since there is no WAF.
 
 **Validated by.** Submit the payload: literal string displayed, not executed. Separately submit it
 padded past the inspection limit to demonstrate why the WAF is not relied on.
@@ -265,12 +283,14 @@ noisy or trains its reader to ignore it.
 
 **Controls.** (1) IAP, the dominant control and it deserves the credit: the attacker must first hold an
 identity explicitly granted `roles/iap.httpsResourceAccessor`, which reduces the internet to a named
-allowlist. (2) Cloud Armor rate limiting. (3) `max_instance_count`, the actual cost ceiling. (4) Body
-size cap. (5) Billing budget alert as the detection layer.
+allowlist. (2) Cloud Armor rate limiting. **Not deployed**, so there is no throttle at all. (3)
+`max_instance_count`, the actual cost ceiling. (4) Body size cap, deferred. (5) Billing budget alert as
+the detection layer.
 
-**Residual.** An authorised analyst can still degrade the service. Rate limiting shapes traffic but does
-not bound the cost of one expensive request. Accepted: known user set, and (3) bounds the worst case to
-a number chosen in advance.
+**Residual.** An authorised analyst can still degrade the service, and with (2) absent there is nothing
+shaping request rate below the instance ceiling. Rate limiting would not have bounded the cost of one
+expensive request anyway, so (3) was always the control that mattered and it is applied. Accepted: the
+user set is one person, and (3) bounds the worst case to a number chosen in advance.
 
 ### T-05 · Client configuration leaks into logs
 **I · TB-4 · L:Low I:High · Residual: Low**
@@ -422,7 +442,7 @@ rather than averaged away.
 | # | Item | Why it matters | Resolves |
 |---|---|---|---|
 | O-1 | ~~Does `internal-and-cloud-load-balancing` admit LBs from other projects?~~ **Resolved** | Moot once IAP moved onto Cloud Run directly: ingress is `ALL`, invoker IAM is scoped to IAP's service agent regardless of which LB originates the call | T-01, `Docs/IAP-Placement.md` |
-| O-2 | Cloud Armor's default body inspection size | Two Google pages disagree: one states 8 kB, the other implies 64 kB. Only the set (8/16/32/48/64 kB) and the 64 kB max are established. Secondary in practice, since the app accepts 200 KB bodies and a tail escapes at any setting until a size cap exists | Read the deployed policy after apply |
+| O-2 | Cloud Armor's default body inspection size | **Moot.** The disagreement between Google's pages (8 kB versus 64 kB) is unresolved and now unresolvable here, because no policy was ever deployed to read. Reopen if quota is granted | Closed as not applicable |
 | O-3 | Direct VPC egress support in `me-central1` | A gap forces the Serverless VPC Access connector back and reopens D3 | Session 2 |
 
 **Decided in Session 1:** IAP on the LB backend service, not direct on Cloud Run (D1, ADR). IAP JWT
@@ -457,7 +477,7 @@ the reasoning that produced them is the reasoning a later reviewer would repeat.
 |---|---|---|
 | Evidence renders unescaped into the DOM (T-03) | `fmt()` escapes before returning; both call sites are element content, so escaping `& < >` is sufficient. The API still returns the raw value, because escaping belongs at the render boundary, not in the data contract | **Fixed** |
 | `gte` on an unparseable value returns 500 (T-04) | `_gte` catches `TypeError`/`ValueError` and fails the control closed. `{"tls_min_version": "TLSv1.2"}` now returns 200 with CR-004 FAIL and the offending value as evidence | **Fixed** |
-| No request size limit (T-03, T-04) | Cap below the Cloud Armor inspection limit | **Deferred to Session 2**, because the limit and the `--request-body-inspection-size` setting must be chosen together |
+| No request size limit (T-03, T-04) | Cap chosen on its own merits | **Still deferred, and now more significant.** It was deferred because the cap and the WAF inspection size had to be chosen together. With no WAF, the cap is the only request-size control there would be, and nothing blocks choosing it |
 
 CSP for T-03 control 2 remains open: `index.html` carries inline `<style>` and `<script>`, so it needs
 nonces or extraction. Sequenced with the Session 2 edge work.

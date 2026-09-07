@@ -6,121 +6,235 @@
 
 <p align="center"><strong>Compliance Checkpoint Service for GCP Cloud Run</strong></p>
 
-Aegis evaluates Cloud Run service configurations against a 13-control security baseline and returns a structured compliance report. Every rule is a declarative YAML file; the baseline is auditable, extensible, and version-controlled without touching the evaluation logic.
+Aegis evaluates a submitted Cloud Run service configuration against a version-controlled 13-control security baseline. It returns a structured verdict for each control, the evidence used, a score, and remediation guidance.
 
-## What it does
+Aegis is a stateless assessment service. It does not inspect a live GCP project, make outbound calls on behalf of the caller, or persist submitted configurations.
 
-POST a Cloud Run service configuration. Get back:
+## Production status
 
-- A per-control **PASS / FAIL verdict** with evidence (what was found vs. what was expected)
-- A **compliance score** (passed / total)
-- **Remediation guidance** for every failing control
+**Applied and documented as live in the `aegis-prod-0926` GCP project, region `me-central1`, behind IAP and a global external Application Load Balancer.** The repository contains Terraform, CI/CD configuration, test coverage, and deployment records supporting that statement.
 
-No agents, no scanners, no GCP credentials required. Aegis judges the configuration document you hand it.
+This repository does not establish full production operations maturity. In particular, Cloud Armor is not deployed, application-side IAP JWT verification is not implemented, and the repository does not provide an automated rollback procedure or comprehensive service-level monitoring. Those limitations are stated in [Security-Exceptions.md](Docs/Security-Exceptions.md) and [Risk-Register.md](Docs/Risk-Register.md).
 
-## The baseline
+## Solution overview
 
-13 controls across 5 categories:
+### Problem
 
-| Category | Controls | Severities |
-|---|---|---|
-| **Cloud Run** | Ingress restriction, dedicated service account, authentication, TLS minimum version | CRITICAL, HIGH, MEDIUM |
-| **IAM** | No overprivileged roles, no public bindings, Workload Identity Federation | CRITICAL, HIGH |
-| **KMS** | Customer-managed encryption keys, key rotation | HIGH, MEDIUM |
-| **Secret Manager** | Secrets in Secret Manager (not env vars), accessed via WIF | HIGH |
-| **Network** | VPC egress path configured, restricted egress | HIGH, MEDIUM |
+Cloud Run configuration is easy to change and difficult to review consistently. A missing ingress restriction, overprivileged IAM binding, unmanaged secret, weak encryption configuration, or unrestricted egress can be missed when review depends on manual inspection.
 
-Rules live in [`app/src/rules/`](app/src/rules/). Complex checks use a custom handler escape hatch while returning the same result contract: three analyse IAM bindings, and one accepts either mechanism that routes Cloud Run egress into a VPC, since the control is about the outcome rather than the product.
+### Objective
+
+Provide a deterministic compliance checkpoint that can be used by an analyst, a web UI, a CI pipeline, or another service before a Cloud Run configuration is accepted.
+
+### Input and processing
+
+The caller submits a JSON document containing a resource type and configuration. FastAPI and Pydantic validate the request shape. The evaluation engine loads the version-controlled YAML rule catalogue, resolves fields including nested paths, evaluates assertions, and dispatches selected controls to custom handlers.
+
+### Output
+
+The service returns 13 PASS or FAIL results. Each result includes the control identity, severity, actual value, expected value, and remediation. Missing evidence fails a control where the rule requires presence. The service does not return WARN results today, although the response contract retains a `warn` field.
+
+### Operational boundary
+
+Aegis evaluates the document it receives. It does not discover resources, query GCP APIs, mutate infrastructure, or prove that the submitted document matches a deployed resource. The caller remains responsible for obtaining and authenticating the configuration being assessed.
+
+## Capabilities
+
+### Configuration assurance
+
+- 13 controls across Cloud Run, IAM, KMS, Secret Manager, and Network.
+- Declarative YAML rules for ordinary comparisons and custom Python handlers for controls requiring more complex logic.
+- Fail-closed handling for absent fields and malformed comparison values.
+- Evidence and remediation in every result, including failed controls.
+- A stable rule catalogue available through `GET /v1/rules`.
+
+### Service delivery
+
+- Browser UI for submitting a configuration and reviewing results.
+- JSON API for automation.
+- Stateless execution with no database, cache, or application-managed session store.
+- Metadata-only structured JSON logs for completed assessments.
+- Optional HMAC-SHA256 signing of assessment responses when `AEGIS_SIGNING_KEY` is configured.
+
+### Platform controls
+
+- Cloud Run with a dedicated runtime service account and second-generation execution environment.
+- IAP enabled directly on Cloud Run, with access granted to the configured analyst identity.
+- Global load balancer, managed certificate, custom domain path, and TLS 1.2 minimum policy.
+- Direct VPC egress through a dedicated subnet, default-deny egress, and Private Google Access routing to restricted Google API addresses.
+- Customer-managed encryption for Cloud Run revisions, Artifact Registry, and the response signing secret.
+- GitHub Actions authentication through Workload Identity Federation, with no service account key in the repository.
+- Binary Authorization admission requiring a KMS-backed attestation for normal images.
+
+The controls above describe what is configured in Terraform and the delivery pipeline. They are not a substitute for independent verification of the deployed project.
 
 ## Architecture
 
+```text
+  +-------------------------------+
+  | AWS account                   |
+  | Route 53 public hosted zone   |
+  | A record -> GCP LB address    |
+  +---------------+---------------+
+                  |
+                  | TB-6: DNS and certificate validation
+                  v
+  +---------------------------------------------------------+
+  | Google Front End                                         |
+  | Global external Application Load Balancer                |
+  | Google-managed certificate, TLS 1.2 minimum              |
+  | Cloud Armor: not deployed, no WAF or rate limiting       |
+  +-------------------------------+-------------------------+
+                                  |
+                                  | TB-1: public edge
+                                  v
+  +---------------------------------------------------------+
+  | Identity-Aware Proxy                                     |
+  | Google sign-in                                           |
+  | roles/iap.httpsResourceAccessor for authorised analysts  |
+  +-------------------------------+-------------------------+
+                                  |
+                                  | TB-2: unauthenticated -> authenticated
+                                  | IAP service agent invokes Cloud Run
+                                  v
+  +---------------------------------------------------------+
+  | Cloud Run: aegis                                         |
+  | IAP enabled directly on the service                      |
+  | Only IAP service agent has roles/run.invoker             |
+  | Dedicated aegis-run identity, distroless, uid 65532      |
+  | Stateless FastAPI application                            |
+  +-------------+-------------------+-----------------------+
+                |                   |
+                | TB-4: runtime     | TB-7: response data
+                | identity          | rendered in browser DOM
+                v                   +---------------------> Analyst
+  +---------------------------+
+  | VPC subnet                |
+  | Direct VPC egress         |
+  | Default-deny firewall     |
+  | Private DNS for APIs      |
+  +------+------+------+-----+
+         |      |      |
+         v      v      v
+  +---------+ +------+ +----------------------+
+  | Secret  | | KMS  | | Cloud Logging and    |
+  | Manager | | CMEK | | Monitoring           |
+  +---------+ +------+ | audit and IAM alert |
+                      +----------------------+
+
+  +-------------------------------+
+  | GitHub Actions                 |
+  | OIDC token                     |
+  +---------------+---------------+
+                  |
+                  | TB-5: external CI identity
+                  v
+  +-------------------------------+       +----------------------+
+  | Workload Identity Federation  |------>| aegis-ci             |
+  | repository and main ref bound  |       | short-lived access   |
+  +-------------------------------+       +----------+-----------+
+                                                     |
+                                                     v
+  +---------------------------------------------------------+
+  | Build once -> scan -> Artifact Registry by digest       |
+  | -> keyless sign and provenance -> verify                |
+  | -> KMS attestation -> Binary Authorization -> deploy    |
+  +---------------------------------------------------------+
 ```
-┌─────────────────────────────────────────────────────┐
-│  Client (UI / curl / CI pipeline)                   │
-│  POST /v1/check  { resource_type, config }          │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│  FastAPI                                             │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ Pydantic │→ │ Engine       │→ │ YAML Rules    │  │
-│  │ validate │  │ resolve_field│  │ 13 controls   │  │
-│  │          │  │ OPERATORS    │  │ 5 categories  │  │
-│  │          │  │ assertions   │  │ 4 custom      │  │
-│  └──────────┘  └──────────────┘  └───────────────┘  │
-│                       │                              │
-│                       ▼                              │
-│  { summary, results[] }  → JSON + structured log    │
-└──────────────────────────────────────────────────────┘
+
+The diagram separates the main trust boundaries. Client traffic crosses the AWS DNS boundary, public Google edge, IAP authentication boundary, and Cloud Run workload boundary. Deployment traffic crosses a separate GitHub OIDC and Workload Identity Federation boundary before it can publish or deploy an artifact.
+
+### Request flow and trust boundaries
+
+1. An analyst reaches the custom domain or Cloud Run URL.
+2. IAP authenticates the analyst. The configured identity must hold `roles/iap.httpsResourceAccessor`.
+3. Only the IAP service agent holds `roles/run.invoker` on the Cloud Run service.
+4. The container receives the request and evaluates the submitted document locally.
+5. The response is returned as JSON or rendered by the browser UI. Assessment metadata is logged, but the submitted configuration is not intentionally logged.
+6. Runtime access to the signing secret and Google services uses the dedicated Cloud Run identity and VPC path.
+
+The application does not verify the IAP signed assertion. Authorization is therefore enforced by IAP and Cloud Run IAM, with no application-side second-line verification. This is an accepted residual risk, not an implemented control. See [Edge-vs-App-Layer-Auth.md](Docs/Edge-vs-App-Layer-Auth.md).
+
+DNS is managed outside this repository in AWS Route 53. The DNS account and registrar are therefore a separate trust boundary upstream of the GCP controls.
+
+## Security model
+
+| Concern | Implemented control | Evidence and limitation |
+|---|---|---|
+| Ingress and authentication | IAP enabled on Cloud Run; access binding for the authorised identity; IAP service agent is the only invoker | Terraform and the IAP verification notes. Application-side JWT verification is absent. |
+| Authorization | Cloud Run IAM prevents callers other than IAP from invoking the service | The service has no application user model or per-user authorization. |
+| Runtime identity | Dedicated `aegis-run` service account | Defined in the IAM and Cloud Run modules. |
+| Secrets | Signing key stored in Secret Manager and injected by secret reference | The service account has secret accessor permission. Secret rotation procedure is not documented. |
+| Encryption | CMEK for revisions, Artifact Registry, and signing secret; keys are in a non-destroyable bootstrap layer | Terraform configuration. Key lifecycle and recovery remain operational responsibilities. |
+| Network egress | Direct VPC egress, default-deny firewall, restricted Google API range, private DNS | Terraform configuration and [Direct-VPC-Egress.md](Docs/Direct-VPC-Egress.md). |
+| Artifact integrity | SHA-pinned build inputs, Trivy scan, keyless cosign signature, provenance attestation, KMS attestation, Binary Authorization | The CI workflow and Binary Authorization module. OS findings are materially suppressed in `.trivyignore`. |
+| Edge protection | Global load balancer, managed certificate, TLS 1.2 minimum | Cloud Armor is not deployed because project quotas are zero and the increase request was denied. There is no WAF or rate limiting. |
+| Data handling | No database or application persistence; metadata-only completion logs | Client configuration exists in request memory and the browser DOM for the request lifecycle. |
+
+Preventative controls include IAP, IAM, VPC firewall rules, CMEK, immutable artifact references, and Binary Authorization. Detective controls include Cloud Audit Logs, the IAM policy-change metric and alert, pipeline verification, and test gates. The repository does not demonstrate complete uptime, certificate-renewal, budget, or application-error alert coverage.
+
+## Evaluation model
+
+Rules are loaded from [app/src/rules/](app/src/rules/) when the application starts. Each rule contains control metadata and either a declarative assertion or a custom handler.
+
+The evaluation path is:
+
+```text
+request schema
+  -> rule catalogue
+  -> field resolution
+  -> assertion or custom handler
+  -> evidence
+  -> PASS or FAIL result
+  -> summary and remediation
 ```
 
-**Stack:** Python 3.11, FastAPI, Pydantic, PyYAML, Jinja2
-**Container:** Distroless Python (`gcr.io/distroless/python3-debian12:nonroot`, uid 65532)
-**Zero runtime dependencies:** no database, no OPA, no cloud credentials.
+### Policy definition
 
-## Quick start
+The baseline contains 13 controls:
 
-```bash
-# Build from repository root
-docker build -t aegis -f app/Dockerfile .
+| Category | Coverage |
+|---|---|
+| Cloud Run | Ingress, dedicated service account, authentication, TLS minimum version |
+| IAM | Overprivileged roles, public bindings, Workload Identity Federation |
+| KMS | Customer-managed key, key rotation |
+| Secret Manager | Secret storage and workload identity access |
+| Network | VPC egress path and restricted egress |
 
-# Run (nonroot, port 8080)
-docker run -p 8080:8080 aegis
-```
+### Fail-closed behaviour
 
-Open [http://localhost:8080](http://localhost:8080) for the UI, or use the API directly:
+An absent field does not count as compliance. Rules that use negative comparisons first assert that the field exists. IAM and network custom handlers also distinguish an absent section from a declared empty collection where that distinction affects the control. An unparseable numeric value fails its control instead of producing a server error.
 
-```bash
-# Health check
-curl http://localhost:8080/health
+### Evidence and custom handlers
 
-# List the baseline
-curl http://localhost:8080/v1/rules
-
-# Evaluate a configuration
-curl -X POST http://localhost:8080/v1/check \
-  -H "Content-Type: application/json" \
-  -d @tests/fixtures/full_secure.json
-```
-
-### Without Docker
-
-```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r app/requirements.txt
-uvicorn src.main:app --host 0.0.0.0 --port 8080 --app-dir app
-```
+The generic engine resolves nested fields such as `encryption.kms_key`, evaluates supported operators, and reports the first failed assertion. Custom handlers are used for IAM binding analysis and for the network control, which accepts either direct VPC egress or a Serverless VPC Access connector because the control is about the security outcome rather than one product mechanism.
 
 ## API
 
 ### `POST /v1/check`
 
-Evaluate a Cloud Run service configuration.
+Evaluates a Cloud Run service configuration. The API accepts the document supplied by the caller; it does not validate that every possible Cloud Run field is present.
 
 ```json
 {
   "resource_type": "cloud_run_service",
   "config": {
     "ingress": "internal-and-cloud-load-balancing",
-    "service_account": "my-sa@project.iam.gserviceaccount.com",
-    "authentication": { "require_auth": true },
+    "service_account": "aegis-run@project.iam.gserviceaccount.com",
+    "authentication": {"require_auth": true},
     "tls_min_version": "1.3",
     "iam_bindings": [],
-    "wif": { "provider": "projects/123/.../repo", "static_keys": [] },
-    "encryption": { "kms_key": "projects/.../cryptoKeys/main", "key_rotation_period": "7776000s" },
-    "secrets": { "storage": "secret_manager", "access_method": "workload_identity" },
-    "network": { "vpc_connector": "projects/.../connectors/main", "egress_setting": "private-ranges-only" }
+    "wif": {"provider": "projects/123/.../repo", "static_keys": []},
+    "encryption": {"kms_key": "projects/.../cryptoKeys/main", "key_rotation_period": "7776000s"},
+    "secrets": {"storage": "secret_manager", "access_method": "workload_identity"},
+    "network": {"vpc_connector": "projects/.../connectors/main", "egress_setting": "private-ranges-only"}
   }
 }
 ```
 
-**Response:**
-
 ```json
 {
-  "summary": { "total": 13, "pass": 13, "fail": 0, "warn": 0, "score": "100%" },
+  "summary": {"total": 13, "pass": 13, "fail": 0, "warn": 0, "score": "100%"},
   "results": [
     {
       "rule_id": "CR-001",
@@ -139,122 +253,161 @@ Evaluate a Cloud Run service configuration.
 }
 ```
 
-When `AEGIS_SIGNING_KEY` is set, the response carries an `X-Aegis-Signature` header holding an HMAC-SHA256 over the exact bytes returned. Keys are sorted and separators compact, so a caller can recompute the digest and confirm a verdict came from this service unaltered. In deployment the key is generated by Terraform and read from Secret Manager; the application never sees a literal.
+When `AEGIS_SIGNING_KEY` is configured, the service returns an `X-Aegis-Signature` header containing an HMAC-SHA256 over the exact compact, sorted JSON response bytes. This provides integrity for the response in transit between the service and a verifier that already knows the shared secret. It is not a user authentication mechanism.
 
 ### `GET /v1/rules`
 
-Returns the full 13-control catalogue with IDs, names, categories, severities, and descriptions.
+Returns the 13-control catalogue with IDs, categories, names, severities, and descriptions.
 
 ### `GET /health`
 
+Returns process health and the number of rules loaded:
+
 ```json
-{ "status": "healthy", "rules_loaded": 13 }
+{"status": "healthy", "rules_loaded": 13}
 ```
 
-## Infrastructure
+The endpoint is a liveness-style application check. It does not verify access to Secret Manager, KMS, Artifact Registry, DNS, or the load balancer.
 
-Every GCP resource is Terraform-managed. The console is for inspection, not provisioning.
+## Production infrastructure
 
-```
-                        Internet
-                            │
-                            ▼
-            ┌───────────────────────────────────┐
-            │  Global external load balancer    │
-            │  Cloud Armor: rate limiting¹       │
-            │  Managed cert, TLS 1.2 RESTRICTED │
-            └─────────────────┬─────────────────┘
-                              ▼
-            ┌───────────────────────────────────┐
-            │  IAP — on the service itself      │
-            └─────────────────┬─────────────────┘
-                              ▼
-            ┌───────────────────────────────────┐
-            │  Cloud Run  (aegis-run identity)  │
-            │  CMEK revisions, gen2 sandbox     │
-            │  signing key by secret reference  │
-            └─────────────────┬─────────────────┘
-                              │ direct VPC egress
-                              ▼
-            ┌───────────────────────────────────┐
-            │  VPC — egress denied by default   │
-            │  one pinhole: 199.36.153.4/30     │
-            │  private DNS → restricted.*       │
-            └───────────────────────────────────┘
+Terraform owns the GCP resources. The bootstrap root is applied once and owns API enablement, the reserved load balancer address, CMEK keys, the Binary Authorization signing key, and the Workload Identity Federation pool and provider. The main root owns the network, IAM bindings, security integrations, Artifact Registry, Cloud Run, load balancer, DNS resources within GCP, and monitoring.
+
+The bootstrap state is intentionally separate. KMS key rings and keys cannot be cleanly destroyed and Workload Identity pools retain deleted identifiers, so the main stack can be rebuilt without destroying the permanent trust anchors. See [Bootstrap-Layer.md](Docs/Bootstrap-Layer.md) and [Deployment.md](Docs/Deployment.md).
+
+The runtime uses direct VPC egress rather than a Serverless VPC Access connector. This avoids a standing connector cost for a service that only needs Google APIs through Private Google Access. It makes subnet sizing and address capacity an operational constraint because Cloud Run instances consume addresses from the subnet.
+
+## Delivery pipeline
+
+```text
+pull request
+  -> unit and API tests
+  -> Bandit, pip-audit, Gitleaks, Checkov
+  -> build and Trivy scan, without push
+
+push to main
+  -> the same validation gates
+  -> build once
+  -> Trivy scan
+  -> push and capture immutable digest
+  -> keyless cosign signature and provenance
+  -> verify signature and workflow identity
+  -> create KMS Binary Authorization attestation
+  -> deploy the same digest to Cloud Run
+  -> wait for deployment and print the service URL
 ```
 
-Egress is denied by default with a single pinhole to `restricted.googleapis.com`, and private DNS zones override the Google API hostnames so Private Google Access resolves inside the VPC. Without those zones the names resolve to public addresses the deny rule blocks, and the service cannot reach its own registry: the three parts only work as a set. IAP sits on the Cloud Run service rather than the load balancer, so authentication holds even for a request that reaches the service directly.
+The pipeline uses GitHub OIDC and GCP Workload Identity Federation. No long-lived service account key is required. Actions are pinned to commit SHAs. The WIF condition restricts the trusted repository owner and `refs/heads/main`.
 
-Data at rest is encrypted with a customer-managed key, including the container images and the response signing key. Key rings carry `prevent_destroy`, because destroying a key orphans everything encrypted under it.
+Keyless cosign and KMS attestation answer different questions. The cosign signature provides publicly verifiable workflow provenance. The KMS attestation is the stable-key proof that Binary Authorization can enforce at Cloud Run admission. Binary Authorization blocks normal images without the required attestation. The bootstrap placeholder image is allowlisted so the service can be created before the first image exists; that is a documented, narrow exception.
 
-¹ Cloud Armor is gated behind `enable_cloud_armor`. The project's `SECURITY_POLICY_RULES` quota is zero, a residual restriction from the billing account's free trial origin that persists after upgrade to Paid. When the quota is granted, the policy adds preconfigured SQLi and XSS signatures alongside rate limiting.
+Infrastructure changes are separate from application deployment. `terraform.yml` is manual dispatch only. Plan, apply, and destroy are separate choices; apply and destroy require the `production-infra` environment approval, and destroy additionally requires typed confirmation.
 
-Reasoning in [IAP-Placement.md](Docs/IAP-Placement.md) and [Direct-VPC-Egress.md](Docs/Direct-VPC-Egress.md).
+## Operations
 
-## Pipeline
+### Normal operation
 
-```
-pull request ──┬── tests
-               ├── Bandit         SAST
-               ├── pip-audit      SCA
-               ├── Gitleaks       secrets
-               ├── Checkov        IaC
-               └── build + Trivy  (not pushed)
+The service scales from zero to the configured maximum instance count. It has a 512 MiB memory limit, one vCPU, startup CPU boost, request concurrency of 80, and a configured minimum of zero instances. The application writes structured JSON logs to stdout. Assessment logs contain the resource type and result counts, not the submitted configuration by design.
 
-push to main ──┬── the same five gates
-               └── build once
-                    └── Trivy
-                         └── push ──────────► digest
-                              └── cosign sign          by digest
-                                   └── attest SLSA     by digest
-                                        └── verify     by digest
-                                             └── KMS attestation
-                                                  └── deploy
-                                                       └── Binary Authorization
-                                                           admits, or blocks
-```
+### Health and monitoring
 
-The image is built **once** and every downstream step addresses it by digest, so the artifact Cloud Run receives is provably the artifact Trivy scanned rather than a second build of the same source. Signing is keyless: cosign exchanges the workflow's OIDC token through Sigstore, and verification pins the issuer and the exact workflow identity, so the signature proves *which repository and workflow* produced the image, not merely that someone signed it. GCP authentication uses Workload Identity Federation, leaving no service account key to leak, and every action is pinned to a commit SHA because tags are mutable, as the March 2026 `trivy-action` compromise demonstrated.
+Terraform enables Cloud Audit Logs for Cloud Run, Secret Manager, and Cloud KMS. It creates a log-based metric and email alert for IAM policy changes.
 
-None of that protects the **platform**, only the pipeline: `cosign verify` constrains what this workflow deploys and says nothing about someone with `roles/run.developer` deploying by hand. Binary Authorization closes that at the admission layer. It cannot read a keyless signature, since a policy matches a stable public key and keyless has none by design, so the image carries two proofs: the keyless signature is the public claim, verifiable by anyone with no GCP access, and a KMS-signed attestation is the enforceable one. See [Artifact-Admission.md](Docs/Artifact-Admission.md) for the alternatives weighed and what the documentation could not settle.
+The repository does not show implemented alerts for uptime, application error rate, certificate renewal, budget exhaustion, or Cloud Run saturation. Cloud Armor rate limiting is also absent. These are operational gaps, not implied capabilities.
 
-Infrastructure changes never ride along with an application push. `terraform.yml` is `workflow_dispatch` only, offering `plan`, `apply` and `destroy` as explicit choices, with apply and destroy behind a GitHub Environment that requires approval and destroy additionally requiring a typed confirmation.
+### Application changes
 
-Module inventory, bootstrap sequence and the handful of steps that cannot be Terraform are in [Deployment.md](Docs/Deployment.md).
+Merge to `main` triggers the CI/CD workflow. A successful run deploys a new revision by digest and Binary Authorization evaluates the image. The repository does not define an automated rollback job or a documented revision rollback runbook. Cloud Run revision rollback remains a platform operation that must be performed and verified by an authorised operator.
 
-## Fail-closed semantics
+### Infrastructure changes
 
-A configuration that says nothing about a control fails it. Silence is not compliance.
+Use the deployment procedure in [Deployment.md](Docs/Deployment.md). The first bootstrap and first main apply have manual prerequisites, including the GCS state bucket, initial API enablement where required, IAP OAuth configuration, GitHub Environment configuration, repository variables, and the external DNS A record.
 
-This is enforced at the rule layer via assertion conjunctions, not an engine override, so the rules remain the single source of truth. A lint test guards against regression. Full rationale in [Fail-Closed-Evaluation.md](Docs/Fail-Closed-Evaluation.md).
+### Secret and key lifecycle
 
-## Tests
+The signing key is generated by Terraform and stored in Secret Manager under CMEK. The runtime receives the secret by reference. Key rings and keys carry `prevent_destroy`; changing or destroying them has consequences for encrypted artifacts and existing attestations. A routine secret rotation runbook is not included in the repository and should be established before ownership transfers.
 
-```bash
-pytest -v
-```
+### Failure handling
 
-92 tests: engine operators, field resolution, assertion conjunctions, all 13 rules against secure, insecure and partial fixtures, the API contract, and a data lint that prevents reintroduction of the fail-open bug.
+The application fails individual controls closed and returns structured failures for malformed comparison values. Infrastructure failures, IAM changes, missing secrets, DNS errors, certificate renewal failures, quota exhaustion, and admission failures are handled by the relevant GCP service or pipeline and require operator diagnosis. The repository documents these boundaries but does not provide a complete incident response runbook.
+
+## Testing and evidence
+
+The repository documents 92 passing tests. The suite covers:
+
+- field resolution and supported comparison operators;
+- conjunctions, short-circuiting, and fail-closed behaviour;
+- all 13 controls against secure, insecure, and partial fixtures;
+- custom handler dispatch;
+- health, rule catalogue, API validation, response shape, evidence, and score calculation;
+- regression protection for malformed numeric input and absent fields.
+
+The CI workflow runs the test suite under Python 3.11 and also runs Bandit, pip-audit, Gitleaks, Checkov, and Trivy. The current WSL workspace used for this review did not have `pytest` installed, so the test count was not independently rerun here.
+
+The tests do not prove that the deployed GCP resources match Terraform, that IAP, DNS, TLS, VPC egress, Secret Manager, Cloud KMS, Binary Authorization, or monitoring behave correctly in the live project, or that a rollback succeeds. Those claims require deployment verification and operational exercises.
+
+## Limitations and residual risk
+
+The important remaining limitations are:
+
+- **No Cloud Armor.** Project quotas are zero and the increase request was denied. There is no WAF and no rate limiting. IAP restricts access to named users and Cloud Run has a maximum instance count, but an authorised caller is not throttled.
+- **No application-side IAP JWT verification.** The application trusts the platform boundary and cannot detect a future configuration that exposes the container with a different invoker binding. The risk register rates this residual risk Medium.
+- **No request body size, depth, or key-count limit.** A large submitted document can consume evaluation and autoscaling resources.
+- **No Content Security Policy.** Output escaping is implemented for the identified browser rendering path, but CSP is deferred defence in depth.
+- **Trivy OS findings are broadly suppressed.** Application dependency findings are gated, but the distroless operating-system layer has suppressed findings, including documented CRITICAL examples. The image must not be described as vulnerability-free.
+- **Three Checkov checks are skipped.** The skips cover VPC Flow Logs, project-level service-account administration, and a GitHub OIDC policy check. The rationale and residual cost are recorded in [Security-Exceptions.md](Docs/Security-Exceptions.md).
+- **External DNS dependency.** Route 53, the registrar, and their access controls are outside the GCP Terraform state.
+- **Single-operator governance.** The repository is single-author, so branch review and separation-of-duties controls are limited. The infrastructure workflow approval gate is the compensating control for Terraform apply and destroy.
+- **No live configuration reconciliation.** A passing submitted document is not proof that the deployed Cloud Run service or its dependencies have that configuration.
+
+See [Threat-Model.md](Docs/Threat-Model.md), [Risk-Register.md](Docs/Risk-Register.md), and [Security-Exceptions.md](Docs/Security-Exceptions.md) for the detailed threat treatment and accepted residual risk.
 
 ## Design decisions
 
-Application:
+- [Fail-Closed Evaluation](Docs/Fail-Closed-Evaluation.md): missing evidence fails a control.
+- [Python Policy vs OPA](Docs/PythonPolicy-vs-OPA.md): why the current scope uses a Python engine.
+- [Distroless Container](Docs/Distroless-Container.md): image surface and runtime trade-offs.
+- [Cloud Run over Functions](Docs/Cloud-Run-over-Functions.md): why the service uses a pre-built container.
+- [Direct VPC Egress](Docs/Direct-VPC-Egress.md): why direct egress was selected over a connector.
+- [IAP Placement](Docs/IAP-Placement.md): why IAP is enabled directly on Cloud Run while the load balancer remains for the custom domain and TLS policy.
+- [Edge vs App Layer Auth](Docs/Edge-vs-App-Layer-Auth.md): the intended application-side verification and its current absence.
+- [Artifact Admission](Docs/Artifact-Admission.md): why the image carries both keyless provenance and a KMS admission attestation.
+- [Bootstrap Layer](Docs/Bootstrap-Layer.md): why permanent trust anchors have a separate lifecycle.
 
-- [**Fail-Closed Evaluation**](Docs/Fail-Closed-Evaluation.md) -> Why absent fields fail controls, and why the engine-level alternative was rejected
-- [**Python Policy vs OPA**](Docs/PythonPolicy-vs-OPA.md) -> Why a Python engine over Open Policy Agent for this scope
-- [**Distroless Container**](Docs/Distroless-Container.md) -> Why distroless over slim/alpine, and what it removes from the attack surface
+## Deployment and handover
 
-Infrastructure:
+An engineer taking ownership should read [Deployment.md](Docs/Deployment.md) before changing infrastructure. It covers bootstrap, Terraform state, manual prerequisites, environment variables, rebuilds, Cloud Armor enablement, ongoing changes, and teardown.
 
-- [**Cloud Run over Functions**](Docs/Cloud-Run-over-Functions.md) -> Why a pre-built image, and which of the assumed differentiators no longer hold
-- [**Direct VPC Egress**](Docs/Direct-VPC-Egress.md) -> Why a network interface on the subnet instead of a Serverless VPC Access connector
-- [**IAP Placement**](Docs/IAP-Placement.md) -> Why IAP moved from the backend service onto Cloud Run, reversing the original decision
-- [**Edge vs App Layer Auth**](Docs/Edge-vs-App-Layer-Auth.md) -> Where the authorisation boundary sits and what the application is still responsible for
-- [**Artifact Admission**](Docs/Artifact-Admission.md) -> Why the image carries two signatures, and why Binary Authorization cannot read the keyless one
-- [**Bootstrap Layer**](Docs/Bootstrap-Layer.md) -> Why five resources live in their own root, and why a stack containing a KMS key ring can never be fully destroyable
+The minimum handover checklist is:
 
-Security posture:
+1. Confirm ownership of the GCP project, billing account, KMS keys, WIF provider, GitHub repository, GitHub Environment, and AWS DNS account.
+2. Confirm the authorised IAP user and the external DNS A record.
+3. Verify the deployed Cloud Run service, invoker IAM, runtime service account, secret reference, VPC egress, Binary Authorization policy, and certificate state.
+4. Run the API and UI smoke checks with a secure fixture and a deliberately insecure fixture.
+5. Establish owners and runbooks for rollback, secret rotation, certificate renewal, budget exhaustion, alert response, and the open security exceptions.
 
-- [**Threat Model**](Docs/Threat-Model.md) -> STRIDE per trust boundary across the service, its edge, its identities and its build path
-- [**Risk Register**](Docs/Risk-Register.md) -> Each threat scored, with the control that addresses it or the residual risk accepted
-- [**Spec Deviations**](Docs/Spec-Deviations.md) -> Every departure from the original specification, with justification
+Local development:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\\Scripts\\activate
+pip install -r app/requirements.txt
+uvicorn src.main:app --host 0.0.0.0 --port 8080 --app-dir app
+```
+
+Container build from the repository root:
+
+```bash
+docker build -t aegis -f app/Dockerfile .
+docker run -p 8080:8080 aegis
+```
+
+Open `http://localhost:8080`, or call the API directly:
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/v1/rules
+curl -X POST http://localhost:8080/v1/check \
+  -H "Content-Type: application/json" \
+  -d @tests/fixtures/full_secure.json
+```
