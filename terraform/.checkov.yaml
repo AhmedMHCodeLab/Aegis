@@ -8,3 +8,6 @@ skip-check:
   # Subnet carries only Cloud Run direct egress to restricted.googleapis.com.
   # Flow logs add cost with no security signal on this traffic pattern.
   - CKV_GCP_26
+  # KMS keys are intentionally destroyable during development.
+  # Re-enable prevent_destroy and remove this skip for production.
+  - CKV_GCP_82
